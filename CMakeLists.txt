@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(GuitarAmp VERSION 1.0.0)
+project(MFAmp VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
-juce_add_plugin(GuitarAmp
+juce_add_plugin(MFAmp
     VERSION                   1.0.0
     COMPANY_NAME              "GaresonC"
     IS_SYNTH                  FALSE
@@ -27,12 +27,12 @@ juce_add_plugin(GuitarAmp
     PLUGIN_MANUFACTURER_CODE  Grsc
     PLUGIN_CODE               GAmp
     FORMATS                   VST3 Standalone
-    PRODUCT_NAME              "Guitar Amp"
+    PRODUCT_NAME              "MF AMP"
 )
 
-juce_generate_juce_header(GuitarAmp)
+juce_generate_juce_header(MFAmp)
 
-target_sources(GuitarAmp
+target_sources(MFAmp
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
@@ -42,7 +42,7 @@ target_sources(GuitarAmp
         Source/IRLoader.cpp
 )
 
-target_compile_definitions(GuitarAmp
+target_compile_definitions(MFAmp
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
@@ -51,7 +51,7 @@ target_compile_definitions(GuitarAmp
         JUCE_MODAL_LOOPS_PERMITTED=1
 )
 
-target_link_libraries(GuitarAmp
+target_link_libraries(MFAmp
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp

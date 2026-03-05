@@ -352,7 +352,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     // Title
     g.setColour(kAccent);
     g.setFont(juce::Font(22.0f, juce::Font::bold));
-    g.drawText("GUITAR AMP", 12, 0, 220, 50, juce::Justification::centredLeft);
+    g.drawText("MF AMP", 12, 0, 220, 50, juce::Justification::centredLeft);
 
     // Section separator lines
     g.setColour(kPanel.brighter(0.2f));
