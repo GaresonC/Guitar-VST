@@ -28,14 +28,25 @@ private:
     int   channel       =   0;
 
     // One set of IIR filters per channel (single-channel filter instances)
-    juce::dsp::IIR::Filter<float> bassFilter    [kMaxChannels];
-    juce::dsp::IIR::Filter<float> midFilter     [kMaxChannels];
-    juce::dsp::IIR::Filter<float> trebleFilter  [kMaxChannels];
-    juce::dsp::IIR::Filter<float> presenceFilter[kMaxChannels];
-    juce::dsp::IIR::Filter<float> dcBlockFilter [kMaxChannels];
+    juce::dsp::IIR::Filter<float> preHpFilter        [kMaxChannels];
+    juce::dsp::IIR::Filter<float> interstageHp1Filter[kMaxChannels];
+    juce::dsp::IIR::Filter<float> interstageHp2Filter[kMaxChannels];
+    juce::dsp::IIR::Filter<float> bassFilter         [kMaxChannels];
+    juce::dsp::IIR::Filter<float> midFilter          [kMaxChannels];
+    juce::dsp::IIR::Filter<float> trebleFilter       [kMaxChannels];
+    juce::dsp::IIR::Filter<float> postDistLpFilter   [kMaxChannels];
+    juce::dsp::IIR::Filter<float> presenceFilter     [kMaxChannels];
+    juce::dsp::IIR::Filter<float> dcBlockFilter      [kMaxChannels];
+
+    // Compressor state
+    float envFollower[kMaxChannels] = { 0.0f, 0.0f };
+    float compAttackCoeff  = 0.0f;
+    float compReleaseCoeff = 0.0f;
 
     void updateFilters();
     void processChannel(float* data, int numSamples, int ch);
 
-    static float softClip(float x, float driveGain);
+    static float softClip(float x, float drive);
+    static float asymClip(float x, float drive);
+    float applyCompression(float x, float& env) const;
 };

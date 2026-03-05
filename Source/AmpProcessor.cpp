@@ -13,18 +13,33 @@ void AmpProcessor::prepare(double sr, int samplesPerBlock)
 
     for (int ch = 0; ch < kMaxChannels; ++ch)
     {
-        bassFilter    [ch].prepare(spec);
-        midFilter     [ch].prepare(spec);
-        trebleFilter  [ch].prepare(spec);
-        presenceFilter[ch].prepare(spec);
-        dcBlockFilter [ch].prepare(spec);
+        preHpFilter        [ch].prepare(spec);
+        interstageHp1Filter[ch].prepare(spec);
+        interstageHp2Filter[ch].prepare(spec);
+        bassFilter         [ch].prepare(spec);
+        midFilter          [ch].prepare(spec);
+        trebleFilter       [ch].prepare(spec);
+        postDistLpFilter   [ch].prepare(spec);
+        presenceFilter     [ch].prepare(spec);
+        dcBlockFilter      [ch].prepare(spec);
 
-        bassFilter    [ch].reset();
-        midFilter     [ch].reset();
-        trebleFilter  [ch].reset();
-        presenceFilter[ch].reset();
-        dcBlockFilter [ch].reset();
+        preHpFilter        [ch].reset();
+        interstageHp1Filter[ch].reset();
+        interstageHp2Filter[ch].reset();
+        bassFilter         [ch].reset();
+        midFilter          [ch].reset();
+        trebleFilter       [ch].reset();
+        postDistLpFilter   [ch].reset();
+        presenceFilter     [ch].reset();
+        dcBlockFilter      [ch].reset();
+
+        envFollower[ch] = 0.0f;
     }
+
+    // Compressor: 5 ms attack, 150 ms release
+    const float sr_f = (float)sr;
+    compAttackCoeff  = std::exp(-1.0f / (0.005f * sr_f));
+    compReleaseCoeff = std::exp(-1.0f / (0.150f * sr_f));
 
     updateFilters();
 }
@@ -59,9 +74,24 @@ void AmpProcessor::updateFilters()
 
     for (int ch = 0; ch < kMaxChannels; ++ch)
     {
+        // Pre-distortion: remove sub-bass to prevent muddy low-end clipping
+        *preHpFilter[ch].coefficients =
+            *juce::dsp::IIR::Coefficients<float>::makeHighPass(
+                sampleRate, 80.0, 0.7);
+
+        // Interstage coupling capacitor simulation (removes low-frequency buildup between stages)
+        *interstageHp1Filter[ch].coefficients =
+            *juce::dsp::IIR::Coefficients<float>::makeHighPass(
+                sampleRate, 120.0, 0.7);
+
+        *interstageHp2Filter[ch].coefficients =
+            *juce::dsp::IIR::Coefficients<float>::makeHighPass(
+                sampleRate, 120.0, 0.7);
+
+        // Tone stack
         *bassFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeLowShelf(
-                sampleRate, 250.0, 1.0, bassGain);
+                sampleRate, 250.0, 0.7, bassGain);
 
         *midFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
@@ -69,11 +99,17 @@ void AmpProcessor::updateFilters()
 
         *trebleFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-                sampleRate, 3000.0, 1.0, trebleGain);
+                sampleRate, 3500.0, 0.7, trebleGain);
 
+        // Post-distortion low-pass: tames fizz and aliasing harshness
+        *postDistLpFilter[ch].coefficients =
+            *juce::dsp::IIR::Coefficients<float>::makeLowPass(
+                sampleRate, 7000.0, 0.7);
+
+        // Presence (power-amp stage high shelf)
         *presenceFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-                sampleRate, 6000.0, 1.0, presenceGain);
+                sampleRate, 5000.0, 0.9, presenceGain);
 
         *dcBlockFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighPass(
@@ -95,37 +131,70 @@ void AmpProcessor::processChannel(float* data, int numSamples, int ch)
     const float inputGain  = juce::Decibels::decibelsToGain(inputGainDb);
     const float masterGain = juce::Decibels::decibelsToGain(masterVolumeDb);
 
-    float driveGain;
+    float stage1Drive, stage2Drive, stage3Drive;
     switch (channel)
     {
-        case 1:  driveGain =  6.0f; break;  // Crunch
-        case 2:  driveGain = 15.0f; break;  // Lead
-        default: driveGain =  2.0f; break;  // Clean
+        case 1:  // Crunch — two stages, asymmetric second stage for even harmonics
+            stage1Drive =  5.0f;
+            stage2Drive =  9.0f;
+            stage3Drive =  0.0f;
+            break;
+        case 2:  // Lead — three stages for full saturation
+            stage1Drive =  7.0f;
+            stage2Drive = 13.0f;
+            stage3Drive = 18.0f;
+            break;
+        default: // Clean — single mild stage
+            stage1Drive =  1.5f;
+            stage2Drive =  0.0f;
+            stage3Drive =  0.0f;
+            break;
     }
 
     for (int i = 0; i < numSamples; ++i)
     {
-        float x = data[i] * inputGain;
+        float x = data[i];
 
-        // Pre-amp first clipping stage
-        x = softClip(x, driveGain * 0.5f);
+        // Remove sub-bass before distortion to prevent flubby low-end
+        x = preHpFilter[ch].processSample(x);
+
+        x *= inputGain;
+
+        // Stage 1: symmetric soft clip (all channels)
+        x = softClip(x, stage1Drive);
+
+        // Coupling capacitor between stages (removes DC/sub buildup)
+        x = interstageHp1Filter[ch].processSample(x);
+
+        // Stage 2: asymmetric clip (crunch + lead) — generates even harmonics
+        if (channel >= 1)
+            x = asymClip(x, stage2Drive);
+
+        // Stage 3: final saturation stage (lead only)
+        if (channel >= 2)
+        {
+            x = interstageHp2Filter[ch].processSample(x);
+            x = softClip(x, stage3Drive);
+        }
 
         // Tone stack
-        x = bassFilter    [ch].processSample(x);
-        x = midFilter     [ch].processSample(x);
-        x = trebleFilter  [ch].processSample(x);
+        x = bassFilter [ch].processSample(x);
+        x = midFilter  [ch].processSample(x);
+        x = trebleFilter[ch].processSample(x);
 
-        // Second clipping stage (crunch / lead)
-        if (channel > 0)
-            x = softClip(x, driveGain);
-
-        // DC block (removes offset after heavy clipping)
+        // DC block (removes offset after asymmetric clipping)
         x = dcBlockFilter[ch].processSample(x);
 
-        // Presence (power amp stage)
+        // Post-distortion low-pass — removes harshness / fizz
+        x = postDistLpFilter[ch].processSample(x);
+
+        // Compressor on driven channels to control dynamics
+        if (channel > 0)
+            x = applyCompression(x, envFollower[ch]);
+
+        // Presence (power-amp stage)
         x = presenceFilter[ch].processSample(x);
 
-        // Master volume
         data[i] = x * masterGain;
     }
 }
@@ -136,4 +205,36 @@ float AmpProcessor::softClip(float x, float drive)
     const float denom = std::tanh(drive);
     if (denom < 1e-9f) return x;
     return std::tanh(x * drive) / denom;
+}
+
+// Asymmetric clip: positive half clips harder than negative, generating even harmonics
+// like a real triode tube stage biased toward cut-off.
+float AmpProcessor::asymClip(float x, float drive)
+{
+    if (drive < 0.001f) return x;
+    const float denom = std::tanh(drive);
+    if (denom < 1e-9f) return x;
+    // Positive half: full drive (harder saturation)
+    // Negative half: 75% drive (softer — creates the asymmetry)
+    const float d = (x >= 0.0f) ? drive : drive * 0.75f;
+    return std::tanh(x * d) / denom;
+}
+
+// Soft-knee feedforward compressor using an envelope follower.
+float AmpProcessor::applyCompression(float x, float& env) const
+{
+    const float absX = std::abs(x);
+    const float coeff = (absX > env) ? compAttackCoeff : compReleaseCoeff;
+    env = coeff * env + (1.0f - coeff) * absX;
+
+    constexpr float threshold = 0.45f;
+    constexpr float ratio     = 3.5f;
+
+    if (env > threshold)
+    {
+        const float gainReduction = (threshold + (env - threshold) / ratio)
+                                    / juce::jmax(env, 1e-9f);
+        return x * gainReduction;
+    }
+    return x;
 }
