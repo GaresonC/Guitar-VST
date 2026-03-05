@@ -3,6 +3,7 @@
 #include "AmpProcessor.h"
 #include "Tuner.h"
 #include "IRLoader.h"
+#include "EQProcessor.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -43,6 +44,7 @@ public:
     AmpProcessor                 ampProcessor;
     Tuner                        tuner;
     IRLoader                     irLoader;
+    EQProcessor                  eqProcessor;
     juce::dsp::NoiseGate<float>  noiseGate;
 
 private:

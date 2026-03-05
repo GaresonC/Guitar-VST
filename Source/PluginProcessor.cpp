@@ -60,6 +60,20 @@ GuitarAmpAudioProcessor::createParameterLayout()
         juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
         juce::NormalisableRange<float>(-80.0f, -20.0f), -60.0f));
 
+    // 8-band post-IR EQ (±15 dB each band)
+    static const char* eqParamIds[EQProcessor::kNumBands] = {
+        "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
+        "eq5Gain","eq6Gain","eq7Gain","eq8Gain"
+    };
+    static const char* eqParamNames[EQProcessor::kNumBands] = {
+        "EQ 80Hz","EQ 250Hz","EQ 500Hz","EQ 1kHz",
+        "EQ 2kHz","EQ 4kHz","EQ 8kHz","EQ 16kHz"
+    };
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{eqParamIds[b], 1}, eqParamNames[b],
+            juce::NormalisableRange<float>(-15.0f, 15.0f), 0.0f));
+
     return { params.begin(), params.end() };
 }
 
@@ -80,6 +94,7 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     ampProcessor.prepare(sampleRate, samplesPerBlock);
     tuner.prepare(sampleRate, samplesPerBlock);
     irLoader.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
+    eqProcessor.prepare(sampleRate, samplesPerBlock);
 
     // Apply current parameter values on prepare
     ampProcessor.update(
@@ -139,6 +154,17 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // IR / Cabinet convolution
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
     irLoader.process(buffer);
+
+    // Post-IR 8-band EQ
+    static const char* eqParamIds[EQProcessor::kNumBands] = {
+        "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
+        "eq5Gain","eq6Gain","eq7Gain","eq8Gain"
+    };
+    float eqGains[EQProcessor::kNumBands];
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        eqGains[b] = apvts.getRawParameterValue(eqParamIds[b])->load();
+    eqProcessor.update(eqGains);
+    eqProcessor.process(buffer);
 }
 
 //==============================================================================

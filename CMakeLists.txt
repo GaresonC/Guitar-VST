@@ -37,6 +37,7 @@ target_sources(GuitarAmp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/AmpProcessor.cpp
+        Source/EQProcessor.cpp
         Source/Tuner.cpp
         Source/IRLoader.cpp
 )

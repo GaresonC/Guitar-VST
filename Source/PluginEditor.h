@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "EQProcessor.h"
 
 //==============================================================================
 // Tuner display — draws note name, cents bar and cents value.
@@ -60,6 +61,10 @@ private:
     juce::TextButton irOnBtn    { "IR ON" };
     juce::Label      irFileLabel;
 
+    // Post-IR 8-band EQ
+    juce::Slider eqSliders[EQProcessor::kNumBands];
+    juce::Label  eqLabels [EQProcessor::kNumBands];
+
     // APVTS attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -68,6 +73,7 @@ private:
                                 trebleAtt, presenceAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, tunerEnabledAtt, gateEnabledAtt;
+    std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
 
     // File chooser must outlive its callback
     std::unique_ptr<juce::FileChooser> fileChooser;

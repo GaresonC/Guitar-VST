@@ -97,7 +97,7 @@ void TunerDisplay::paint(juce::Graphics& g)
 GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), tunerDisplay(p)
 {
-    setSize(720, 500);
+    setSize(720, 660);
 
     // ---- Tuner ---------------------------------------------------------------
     addAndMakeVisible(tunerDisplay);
@@ -234,6 +234,37 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
         irFileLabel.setText("No IR loaded", juce::dontSendNotification);
     }
     syncIRPresetBox();
+
+    // ---- Post-IR 8-band EQ --------------------------------------------------
+    static const char* kEqParamIds[EQProcessor::kNumBands] = {
+        "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
+        "eq5Gain","eq6Gain","eq7Gain","eq8Gain"
+    };
+    static const char* kEqLabels[EQProcessor::kNumBands] = {
+        "80","250","500","1k","2k","4k","8k","16k"
+    };
+
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+    {
+        auto& s = eqSliders[b];
+        s.setSliderStyle(juce::Slider::LinearVertical);
+        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        s.setColour(juce::Slider::trackColourId,      kAccent);
+        s.setColour(juce::Slider::thumbColourId,      kAccent.brighter(0.4f));
+        s.setColour(juce::Slider::backgroundColourId, kPanel);
+        s.setDoubleClickReturnValue(true, 0.0);
+        addAndMakeVisible(s);
+
+        auto& l = eqLabels[b];
+        l.setText(kEqLabels[b], juce::dontSendNotification);
+        l.setFont(juce::Font(10.0f, juce::Font::bold));
+        l.setColour(juce::Label::textColourId, kSubText);
+        l.setJustificationType(juce::Justification::centred);
+        addAndMakeVisible(l);
+
+        eqAtts[b] = std::make_unique<SliderAtt>(
+            audioProcessor.apvts, kEqParamIds[b], s);
+    }
 }
 
 GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor() {}
@@ -329,6 +360,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawHorizontalLine(140, 8.0f, (float)getWidth() - 8.0f);  // below tuner
     g.drawHorizontalLine(200, 8.0f, (float)getWidth() - 8.0f);  // below gate
     g.drawHorizontalLine(410, 8.0f, (float)getWidth() - 8.0f);  // below tone
+    g.drawHorizontalLine(510, 8.0f, (float)getWidth() - 8.0f);  // below cabinet
 
     // Section labels
     g.setColour(kSubText.withAlpha(0.6f));
@@ -337,6 +369,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawText("NOISE GATE", 12, 142, 90, 14, juce::Justification::centredLeft);
     g.drawText("TONE",       12, 202, 60, 14, juce::Justification::centredLeft);
     g.drawText("CABINET",    12, 412, 60, 14, juce::Justification::centredLeft);
+    g.drawText("EQ",         12, 512, 60, 14, juce::Justification::centredLeft);
 }
 
 void GuitarAmpAudioProcessorEditor::resized()
@@ -393,4 +426,17 @@ void GuitarAmpAudioProcessorEditor::resized()
 
     loadIRBtn  .setBounds(8,       cabY2,      90, rowH);
     irFileLabel.setBounds(106,     cabY2, W - 114, rowH);
+
+    // ---- EQ section (510–660) ------------------------------------------------
+    const int eqSectionY = 530;
+    const int eqSliderH  = 100;
+    const int eqLabelH   = 16;
+    const int eqBandW    = (W - 16) / EQProcessor::kNumBands;
+
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+    {
+        const int bx = 8 + b * eqBandW;
+        eqLabels [b].setBounds(bx, eqSectionY,           eqBandW, eqLabelH);
+        eqSliders[b].setBounds(bx, eqSectionY + eqLabelH, eqBandW, eqSliderH);
+    }
 }

@@ -31,6 +31,7 @@ private:
     juce::dsp::IIR::Filter<float> preHpFilter        [kMaxChannels];
     juce::dsp::IIR::Filter<float> interstageHp1Filter[kMaxChannels];
     juce::dsp::IIR::Filter<float> interstageHp2Filter[kMaxChannels];
+    juce::dsp::IIR::Filter<float> interstageHp3Filter[kMaxChannels];
     juce::dsp::IIR::Filter<float> bassFilter         [kMaxChannels];
     juce::dsp::IIR::Filter<float> midFilter          [kMaxChannels];
     juce::dsp::IIR::Filter<float> trebleFilter       [kMaxChannels];
