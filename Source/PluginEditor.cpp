@@ -97,7 +97,7 @@ void TunerDisplay::paint(juce::Graphics& g)
 GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), tunerDisplay(p)
 {
-    setSize(720, 660);
+    setSize(720, 900);
 
     // ---- Tuner ---------------------------------------------------------------
     addAndMakeVisible(tunerDisplay);
@@ -106,41 +106,6 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     styleButton(tunerToggle, true);
     addAndMakeVisible(tunerToggle);
     tunerEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "tunerEnabled", tunerToggle);
-
-    // ---- Channel buttons -----------------------------------------------------
-    cleanBtn.setRadioGroupId(1);
-    crunchBtn.setRadioGroupId(1);
-    leadBtn.setRadioGroupId(1);
-    for (auto* b : { &cleanBtn, &crunchBtn, &leadBtn })
-    {
-        b->setClickingTogglesState(true);
-        styleButton(*b, true);
-        addAndMakeVisible(b);
-    }
-
-    cleanBtn.onClick = [this]
-    {
-        if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(
-                audioProcessor.apvts.getParameter("channel")))
-            p->setValueNotifyingHost(p->convertTo0to1(0.0f));
-        syncChannelButtons();
-    };
-    crunchBtn.onClick = [this]
-    {
-        if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(
-                audioProcessor.apvts.getParameter("channel")))
-            p->setValueNotifyingHost(p->convertTo0to1(1.0f));
-        syncChannelButtons();
-    };
-    leadBtn.onClick = [this]
-    {
-        if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(
-                audioProcessor.apvts.getParameter("channel")))
-            p->setValueNotifyingHost(p->convertTo0to1(2.0f));
-        syncChannelButtons();
-    };
-
-    syncChannelButtons();
 
     // ---- Noise gate ----------------------------------------------------------
     gateEnableBtn.setClickingTogglesState(true);
@@ -164,6 +129,55 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     gateThreshLabel.setColour(juce::Label::textColourId, kSubText);
     gateThreshLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(gateThreshLabel);
+
+    // ---- Pitch shifter -------------------------------------------------------
+    pitchEnableBtn.setClickingTogglesState(true);
+    styleButton(pitchEnableBtn, true);
+    addAndMakeVisible(pitchEnableBtn);
+    pitchEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "pitchShiftEnabled", pitchEnableBtn);
+
+    pitchSemiSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    pitchSemiSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+    pitchSemiSlider.setColour(juce::Slider::trackColourId,          kAccent);
+    pitchSemiSlider.setColour(juce::Slider::thumbColourId,          kAccent.brighter(0.3f));
+    pitchSemiSlider.setColour(juce::Slider::backgroundColourId,     kPanel);
+    pitchSemiSlider.setColour(juce::Slider::textBoxTextColourId,    kSubText);
+    pitchSemiSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    pitchSemiSlider.setTextValueSuffix(" st");
+    addAndMakeVisible(pitchSemiSlider);
+    pitchSemiAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "pitchShiftSemitones", pitchSemiSlider);
+
+    pitchSemiLabel.setText("SEMITONES", juce::dontSendNotification);
+    pitchSemiLabel.setFont(juce::Font(11.0f, juce::Font::bold));
+    pitchSemiLabel.setColour(juce::Label::textColourId, kSubText);
+    pitchSemiLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(pitchSemiLabel);
+
+    // ---- Pre-amp stage (EQ + comp) -------------------------------------------
+    setupKnob(preEqLowSlider,      preEqLowLabel,      "LOW");
+    setupKnob(preEqMidSlider,      preEqMidLabel,      "MID");
+    setupKnob(preEqHighSlider,     preEqHighLabel,     "HIGH");
+    setupKnob(preCompThreshSlider, preCompThreshLabel, "THRESH");
+    setupKnob(preCompRatioSlider,  preCompRatioLabel,  "RATIO");
+
+    preEqLowAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqLow",      preEqLowSlider);
+    preEqMidAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqMid",      preEqMidSlider);
+    preEqHighAtt     = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqHigh",     preEqHighSlider);
+    preCompThreshAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompThresh", preCompThreshSlider);
+    preCompRatioAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompRatio",  preCompRatioSlider);
+
+    // ---- Post-amp stage (EQ + comp) ------------------------------------------
+    setupKnob(postEqLowSlider,      postEqLowLabel,      "LOW");
+    setupKnob(postEqMidSlider,      postEqMidLabel,      "MID");
+    setupKnob(postEqHighSlider,     postEqHighLabel,     "HIGH");
+    setupKnob(postCompThreshSlider, postCompThreshLabel, "THRESH");
+    setupKnob(postCompRatioSlider,  postCompRatioLabel,  "RATIO");
+
+    postEqLowAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqLow",      postEqLowSlider);
+    postEqMidAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqMid",      postEqMidSlider);
+    postEqHighAtt     = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqHigh",     postEqHighSlider);
+    postCompThreshAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompThresh", postCompThreshSlider);
+    postCompRatioAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompRatio",  postCompRatioSlider);
 
     // ---- Amp knobs -----------------------------------------------------------
     setupKnob(gainSlider,     gainLabel,     "GAIN");
@@ -299,14 +313,6 @@ void GuitarAmpAudioProcessorEditor::styleButton(juce::TextButton& b, bool isTogg
     (void)isToggle;
 }
 
-void GuitarAmpAudioProcessorEditor::syncChannelButtons()
-{
-    const int ch = (int)audioProcessor.apvts.getRawParameterValue("channel")->load();
-    cleanBtn .setToggleState(ch == 0, juce::dontSendNotification);
-    crunchBtn.setToggleState(ch == 1, juce::dontSendNotification);
-    leadBtn  .setToggleState(ch == 2, juce::dontSendNotification);
-}
-
 void GuitarAmpAudioProcessorEditor::syncIRPresetBox()
 {
     const juce::String name = audioProcessor.irLoader.getFileName();
@@ -359,30 +365,28 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawHorizontalLine( 50, 8.0f, (float)getWidth() - 8.0f);  // below header
     g.drawHorizontalLine(140, 8.0f, (float)getWidth() - 8.0f);  // below tuner
     g.drawHorizontalLine(200, 8.0f, (float)getWidth() - 8.0f);  // below gate
-    g.drawHorizontalLine(410, 8.0f, (float)getWidth() - 8.0f);  // below tone
-    g.drawHorizontalLine(510, 8.0f, (float)getWidth() - 8.0f);  // below cabinet
+    g.drawHorizontalLine(260, 8.0f, (float)getWidth() - 8.0f);  // below pitch shift
+    g.drawHorizontalLine(350, 8.0f, (float)getWidth() - 8.0f);  // below pre-amp stage
+    g.drawHorizontalLine(560, 8.0f, (float)getWidth() - 8.0f);  // below tone
+    g.drawHorizontalLine(660, 8.0f, (float)getWidth() - 8.0f);  // below cabinet
+    g.drawHorizontalLine(750, 8.0f, (float)getWidth() - 8.0f);  // below post-amp stage
 
     // Section labels
     g.setColour(kSubText.withAlpha(0.6f));
     g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("TUNER",      12,  52, 60, 14, juce::Justification::centredLeft);
-    g.drawText("NOISE GATE", 12, 142, 90, 14, juce::Justification::centredLeft);
-    g.drawText("TONE",       12, 202, 60, 14, juce::Justification::centredLeft);
-    g.drawText("CABINET",    12, 412, 60, 14, juce::Justification::centredLeft);
-    g.drawText("EQ",         12, 512, 60, 14, juce::Justification::centredLeft);
+    g.drawText("TUNER",       12,  52, 60, 14, juce::Justification::centredLeft);
+    g.drawText("NOISE GATE",  12, 142, 90, 14, juce::Justification::centredLeft);
+    g.drawText("PITCH SHIFT", 12, 202, 90, 14, juce::Justification::centredLeft);
+    g.drawText("PRE-AMP",     12, 262, 70, 14, juce::Justification::centredLeft);
+    g.drawText("TONE",        12, 352, 60, 14, juce::Justification::centredLeft);
+    g.drawText("CABINET",     12, 562, 60, 14, juce::Justification::centredLeft);
+    g.drawText("POST-AMP",    12, 662, 70, 14, juce::Justification::centredLeft);
+    g.drawText("EQ",          12, 752, 60, 14, juce::Justification::centredLeft);
 }
 
 void GuitarAmpAudioProcessorEditor::resized()
 {
     const int W = getWidth();
-
-    // ---- Header (0–50) -------------------------------------------------------
-    const int btnH = 30, btnY = 10;
-    const int btnW = 72;
-    int bx = W - 10;
-    bx -= btnW; leadBtn  .setBounds(bx, btnY, btnW, btnH);
-    bx -= 4 + btnW; crunchBtn.setBounds(bx, btnY, btnW, btnH);
-    bx -= 4 + btnW; cleanBtn .setBounds(bx, btnY, btnW, btnH);
 
     // ---- Tuner section (50–140) ----------------------------------------------
     const int tunerY = 68;
@@ -397,8 +401,32 @@ void GuitarAmpAudioProcessorEditor::resized()
     gateThreshLabel.setBounds(80,  gateY,  80, gateH);
     gateThreshSlider.setBounds(160, gateY, W - 168, gateH);
 
-    // ---- Knobs section (200–410) ---------------------------------------------
-    const int knobAreaY = 218;
+    // ---- Pitch shift section (200–260) ---------------------------------------
+    const int pitchY = 215;
+    const int pitchH = 34;
+    pitchEnableBtn .setBounds(8,   pitchY,  64, pitchH);
+    pitchSemiLabel .setBounds(80,  pitchY,  80, pitchH);
+    pitchSemiSlider.setBounds(168, pitchY, W - 176, pitchH);
+
+    // ---- Pre-amp stage (260–350) ---------------------------------------------
+    const int stageKnobW = (W - 16) / 5;
+    const int stageKnobH = 74;
+
+    auto layoutStageKnob = [&](juce::Slider& s, juce::Label& l, int col, int baseY)
+    {
+        const int x = 8 + col * stageKnobW;
+        l.setBounds(x, baseY, stageKnobW, 16);
+        s.setBounds(x, baseY + 16, stageKnobW, stageKnobH);
+    };
+
+    layoutStageKnob(preEqLowSlider,      preEqLowLabel,      0, 278);
+    layoutStageKnob(preEqMidSlider,      preEqMidLabel,      1, 278);
+    layoutStageKnob(preEqHighSlider,     preEqHighLabel,     2, 278);
+    layoutStageKnob(preCompThreshSlider, preCompThreshLabel, 3, 278);
+    layoutStageKnob(preCompRatioSlider,  preCompRatioLabel,  4, 278);
+
+    // ---- Knobs section (350–560) ---------------------------------------------
+    const int knobAreaY = 368;
     const int knobAreaH = 185;
     const int knobW     = W / 6;
 
@@ -416,9 +444,9 @@ void GuitarAmpAudioProcessorEditor::resized()
     layoutKnob(presenceSlider, presenceLabel, 4);
     layoutKnob(masterSlider,   masterLabel,   5);
 
-    // ---- Cabinet section (410–500) -------------------------------------------
-    const int cabY1 = 428;  // preset row
-    const int cabY2 = 466;  // browse row
+    // ---- Cabinet section (560–660) -------------------------------------------
+    const int cabY1 = 578;  // preset row
+    const int cabY2 = 616;  // browse row
     const int rowH  = 30;
 
     irPresetBox.setBounds(8,       cabY1, W - 104, rowH);
@@ -427,16 +455,23 @@ void GuitarAmpAudioProcessorEditor::resized()
     loadIRBtn  .setBounds(8,       cabY2,      90, rowH);
     irFileLabel.setBounds(106,     cabY2, W - 114, rowH);
 
-    // ---- EQ section (510–660) ------------------------------------------------
-    const int eqSectionY = 530;
+    // ---- Post-amp stage (660–750) --------------------------------------------
+    layoutStageKnob(postEqLowSlider,      postEqLowLabel,      0, 678);
+    layoutStageKnob(postEqMidSlider,      postEqMidLabel,      1, 678);
+    layoutStageKnob(postEqHighSlider,     postEqHighLabel,     2, 678);
+    layoutStageKnob(postCompThreshSlider, postCompThreshLabel, 3, 678);
+    layoutStageKnob(postCompRatioSlider,  postCompRatioLabel,  4, 678);
+
+    // ---- EQ section (750–900) ------------------------------------------------
+    const int eqSectionY = 770;
     const int eqSliderH  = 100;
     const int eqLabelH   = 16;
     const int eqBandW    = (W - 16) / EQProcessor::kNumBands;
 
     for (int b = 0; b < EQProcessor::kNumBands; ++b)
     {
-        const int bx = 8 + b * eqBandW;
-        eqLabels [b].setBounds(bx, eqSectionY,           eqBandW, eqLabelH);
-        eqSliders[b].setBounds(bx, eqSectionY + eqLabelH, eqBandW, eqSliderH);
+        const int eqBx = 8 + b * eqBandW;
+        eqLabels [b].setBounds(eqBx, eqSectionY,            eqBandW, eqLabelH);
+        eqSliders[b].setBounds(eqBx, eqSectionY + eqLabelH, eqBandW, eqSliderH);
     }
 }

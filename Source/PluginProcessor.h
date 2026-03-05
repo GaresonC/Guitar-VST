@@ -1,9 +1,11 @@
 #pragma once
 #include <JuceHeader.h>
 #include "AmpProcessor.h"
+#include "StageProcessor.h"
 #include "Tuner.h"
 #include "IRLoader.h"
 #include "EQProcessor.h"
+#include "PitchShifter.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -42,10 +44,13 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     AmpProcessor                 ampProcessor;
+    StageProcessor               preAmpStage  { 200.f, 700.f,  4500.f, 8.f,  50.f };
+    StageProcessor               postAmpStage { 150.f, 1000.f, 5000.f, 2.f,  80.f };
     Tuner                        tuner;
     IRLoader                     irLoader;
     EQProcessor                  eqProcessor;
     juce::dsp::NoiseGate<float>  noiseGate;
+    PitchShifter                 pitchShifter;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

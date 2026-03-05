@@ -23,7 +23,7 @@ juce_add_plugin(MFAmp
     NEEDS_MIDI_OUTPUT         FALSE
     IS_MIDI_EFFECT            FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD   FALSE
+    COPY_PLUGIN_AFTER_BUILD   TRUE
     PLUGIN_MANUFACTURER_CODE  Grsc
     PLUGIN_CODE               GAmp
     FORMATS                   VST3 Standalone
@@ -38,8 +38,10 @@ target_sources(MFAmp
         Source/PluginEditor.cpp
         Source/AmpProcessor.cpp
         Source/EQProcessor.cpp
+        Source/StageProcessor.cpp
         Source/Tuner.cpp
         Source/IRLoader.cpp
+        Source/PitchShifter.cpp
 )
 
 target_compile_definitions(MFAmp

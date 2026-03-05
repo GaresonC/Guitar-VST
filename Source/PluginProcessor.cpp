@@ -43,10 +43,6 @@ GuitarAmpAudioProcessor::createParameterLayout()
         juce::ParameterID{"masterVolume", 1}, "Master Volume",
         juce::NormalisableRange<float>(-40.0f, 0.0f), -6.0f));
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"channel", 1}, "Channel",
-        juce::NormalisableRange<float>(0.0f, 2.0f, 1.0f), 0.0f));
-
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"irEnabled", 1}, "IR Enabled", true));
 
@@ -59,6 +55,47 @@ GuitarAmpAudioProcessor::createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
         juce::NormalisableRange<float>(-80.0f, -20.0f), -60.0f));
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"pitchShiftEnabled", 1}, "Pitch Shift Enabled", false));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"pitchShiftSemitones", 1}, "Pitch Shift",
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 1.0f), 0.0f));
+
+    // Pre-amp stage: 3-band EQ + compressor (shapes signal before distortion)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqLow",  1}, "Pre EQ Low",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqMid",  1}, "Pre EQ Mid",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqHigh", 1}, "Pre EQ High",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preCompThresh", 1}, "Pre Comp Thresh",
+        juce::NormalisableRange<float>(-60.0f, 0.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preCompRatio",  1}, "Pre Comp Ratio",
+        juce::NormalisableRange<float>(1.0f, 20.0f), 3.0f));
+
+    // Post-amp stage: 3-band EQ + compressor (shapes and glues after distortion)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqLow",  1}, "Post EQ Low",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqMid",  1}, "Post EQ Mid",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqHigh", 1}, "Post EQ High",
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postCompThresh", 1}, "Post Comp Thresh",
+        juce::NormalisableRange<float>(-60.0f, 0.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postCompRatio",  1}, "Post Comp Ratio",
+        juce::NormalisableRange<float>(1.0f, 20.0f), 4.0f));
 
     // 8-band post-IR EQ (±15 dB each band)
     static const char* eqParamIds[EQProcessor::kNumBands] = {
@@ -91,7 +128,11 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     noiseGate.setRelease(150.0f);
     noiseGate.setRatio(10.0f);
 
+    pitchShifter.prepare(sampleRate, samplesPerBlock);
+
     ampProcessor.prepare(sampleRate, samplesPerBlock);
+    preAmpStage.prepare(sampleRate, samplesPerBlock);
+    postAmpStage.prepare(sampleRate, samplesPerBlock);
     tuner.prepare(sampleRate, samplesPerBlock);
     irLoader.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
     eqProcessor.prepare(sampleRate, samplesPerBlock);
@@ -103,8 +144,7 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
         apvts.getRawParameterValue("mid")->load(),
         apvts.getRawParameterValue("treble")->load(),
         apvts.getRawParameterValue("presence")->load(),
-        apvts.getRawParameterValue("masterVolume")->load(),
-        (int)apvts.getRawParameterValue("channel")->load());
+        apvts.getRawParameterValue("masterVolume")->load());
 
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
 
@@ -140,6 +180,23 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         noiseGate.process(ctx);
     }
 
+    // Pitch shifter (after gate, before amp — clean signal)
+    if (apvts.getRawParameterValue("pitchShiftEnabled")->load() > 0.5f)
+    {
+        const int semitones = juce::roundToInt(
+            apvts.getRawParameterValue("pitchShiftSemitones")->load());
+        pitchShifter.process(buffer, semitones);
+    }
+
+    // Pre-amp stage: EQ + compression before distortion
+    preAmpStage.update(
+        apvts.getRawParameterValue("preEqLow")->load(),
+        apvts.getRawParameterValue("preEqMid")->load(),
+        apvts.getRawParameterValue("preEqHigh")->load(),
+        apvts.getRawParameterValue("preCompThresh")->load(),
+        apvts.getRawParameterValue("preCompRatio")->load());
+    preAmpStage.process(buffer);
+
     // Amp processing
     ampProcessor.update(
         apvts.getRawParameterValue("inputGain")->load(),
@@ -147,9 +204,17 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         apvts.getRawParameterValue("mid")->load(),
         apvts.getRawParameterValue("treble")->load(),
         apvts.getRawParameterValue("presence")->load(),
-        apvts.getRawParameterValue("masterVolume")->load(),
-        (int)apvts.getRawParameterValue("channel")->load());
+        apvts.getRawParameterValue("masterVolume")->load());
     ampProcessor.process(buffer);
+
+    // Post-amp stage: EQ + compression to glue and shape after distortion
+    postAmpStage.update(
+        apvts.getRawParameterValue("postEqLow")->load(),
+        apvts.getRawParameterValue("postEqMid")->load(),
+        apvts.getRawParameterValue("postEqHigh")->load(),
+        apvts.getRawParameterValue("postCompThresh")->load(),
+        apvts.getRawParameterValue("postCompRatio")->load());
+    postAmpStage.process(buffer);
 
     // IR / Cabinet convolution
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
