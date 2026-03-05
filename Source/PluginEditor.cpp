@@ -12,6 +12,9 @@ static const juce::Colour kRed       { 0xffdd2222 };
 static const juce::Colour kBtnActive { 0xffcc4400 };
 static const juce::Colour kBtnIdle   { 0xff333333 };
 
+static const juce::String kIRDir     = "C:/Users/Gary/Documents/Cab IR/Custom IRs/";
+static const int kNumPresetIRs       = 12;
+
 //==============================================================================
 TunerDisplay::TunerDisplay(GuitarAmpAudioProcessor& p) : processor(p)
 {
@@ -94,7 +97,7 @@ void TunerDisplay::paint(juce::Graphics& g)
 GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), tunerDisplay(p)
 {
-    setSize(720, 430);
+    setSize(720, 500);
 
     // ---- Tuner ---------------------------------------------------------------
     addAndMakeVisible(tunerDisplay);
@@ -139,6 +142,29 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
 
     syncChannelButtons();
 
+    // ---- Noise gate ----------------------------------------------------------
+    gateEnableBtn.setClickingTogglesState(true);
+    styleButton(gateEnableBtn, true);
+    addAndMakeVisible(gateEnableBtn);
+    gateEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "noiseGateEnabled", gateEnableBtn);
+
+    gateThreshSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    gateThreshSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+    gateThreshSlider.setColour(juce::Slider::trackColourId,        kAccent);
+    gateThreshSlider.setColour(juce::Slider::thumbColourId,        kAccent.brighter(0.3f));
+    gateThreshSlider.setColour(juce::Slider::backgroundColourId,   kPanel);
+    gateThreshSlider.setColour(juce::Slider::textBoxTextColourId,  kSubText);
+    gateThreshSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    gateThreshSlider.setTextValueSuffix(" dB");
+    addAndMakeVisible(gateThreshSlider);
+    gateThreshAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "noiseGateThreshold", gateThreshSlider);
+
+    gateThreshLabel.setText("THRESHOLD", juce::dontSendNotification);
+    gateThreshLabel.setFont(juce::Font(11.0f, juce::Font::bold));
+    gateThreshLabel.setColour(juce::Label::textColourId, kSubText);
+    gateThreshLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(gateThreshLabel);
+
     // ---- Amp knobs -----------------------------------------------------------
     setupKnob(gainSlider,     gainLabel,     "GAIN");
     setupKnob(bassSlider,     bassLabel,     "BASS");
@@ -155,20 +181,59 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     masterAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "masterVolume", masterSlider);
 
     // ---- IR loader -----------------------------------------------------------
+    // Preset combobox
+    for (int i = 1; i <= kNumPresetIRs; ++i)
+        irPresetBox.addItem("Impact Studios - IR " + juce::String(i), i);
+
+    irPresetBox.setColour(juce::ComboBox::backgroundColourId,  kPanel);
+    irPresetBox.setColour(juce::ComboBox::textColourId,        kText);
+    irPresetBox.setColour(juce::ComboBox::outlineColourId,     kBtnIdle.brighter(0.2f));
+    irPresetBox.setColour(juce::ComboBox::arrowColourId,       kAccent);
+    irPresetBox.setTextWhenNothingSelected("Custom IR");
+    irPresetBox.onChange = [this]
+    {
+        int id = irPresetBox.getSelectedId();
+        if (id >= 1 && id <= kNumPresetIRs)
+        {
+            juce::File irFile(kIRDir + "Impact Studios_IR " + juce::String(id) + ".wav");
+            if (audioProcessor.irLoader.loadIR(irFile))
+            {
+                irFileLabel.setText(audioProcessor.irLoader.getFileName(),
+                                    juce::dontSendNotification);
+                irFileLabel.setColour(juce::Label::textColourId, kText);
+            }
+        }
+    };
+    addAndMakeVisible(irPresetBox);
+
+    // Browse button (custom IR from disk)
     styleButton(loadIRBtn, false);
     loadIRBtn.onClick = [this] { loadIRFile(); };
     addAndMakeVisible(loadIRBtn);
 
+    // IR ON toggle
     irOnBtn.setClickingTogglesState(true);
     styleButton(irOnBtn, true);
     addAndMakeVisible(irOnBtn);
     irEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "irEnabled", irOnBtn);
 
-    irFileLabel.setText("No IR loaded", juce::dontSendNotification);
+    // File name label
     irFileLabel.setFont(juce::Font(13.0f));
     irFileLabel.setColour(juce::Label::textColourId, kSubText);
     irFileLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(irFileLabel);
+
+    // Reflect whatever IR is already loaded (e.g. default IR from prepareToPlay)
+    if (audioProcessor.irLoader.hasLoadedIR())
+    {
+        irFileLabel.setText(audioProcessor.irLoader.getFileName(), juce::dontSendNotification);
+        irFileLabel.setColour(juce::Label::textColourId, kText);
+    }
+    else
+    {
+        irFileLabel.setText("No IR loaded", juce::dontSendNotification);
+    }
+    syncIRPresetBox();
 }
 
 GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor() {}
@@ -179,12 +244,12 @@ void GuitarAmpAudioProcessorEditor::setupKnob(juce::Slider& s, juce::Label& l,
 {
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 18);
-    s.setColour(juce::Slider::rotarySliderFillColourId,  kAccent);
+    s.setColour(juce::Slider::rotarySliderFillColourId,    kAccent);
     s.setColour(juce::Slider::rotarySliderOutlineColourId, kPanel.brighter(0.15f));
-    s.setColour(juce::Slider::thumbColourId,             kAccent.brighter(0.3f));
-    s.setColour(juce::Slider::textBoxTextColourId,       kSubText);
-    s.setColour(juce::Slider::textBoxOutlineColourId,    juce::Colours::transparentBlack);
-    s.setColour(juce::Slider::backgroundColourId,        kPanel);
+    s.setColour(juce::Slider::thumbColourId,               kAccent.brighter(0.3f));
+    s.setColour(juce::Slider::textBoxTextColourId,         kSubText);
+    s.setColour(juce::Slider::textBoxOutlineColourId,      juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::backgroundColourId,          kPanel);
     addAndMakeVisible(s);
 
     l.setText(name, juce::dontSendNotification);
@@ -211,11 +276,25 @@ void GuitarAmpAudioProcessorEditor::syncChannelButtons()
     leadBtn  .setToggleState(ch == 2, juce::dontSendNotification);
 }
 
+void GuitarAmpAudioProcessorEditor::syncIRPresetBox()
+{
+    const juce::String name = audioProcessor.irLoader.getFileName();
+    for (int i = 1; i <= kNumPresetIRs; ++i)
+    {
+        if (name == "Impact Studios_IR " + juce::String(i) + ".wav")
+        {
+            irPresetBox.setSelectedId(i, juce::dontSendNotification);
+            return;
+        }
+    }
+    irPresetBox.setSelectedId(0, juce::dontSendNotification);
+}
+
 void GuitarAmpAudioProcessorEditor::loadIRFile()
 {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Select Cabinet IR File",
-        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+        juce::File(kIRDir),
         "*.wav;*.aif;*.aiff");
 
     fileChooser->launchAsync(
@@ -229,6 +308,7 @@ void GuitarAmpAudioProcessorEditor::loadIRFile()
                 irFileLabel.setText(audioProcessor.irLoader.getFileName(),
                                     juce::dontSendNotification);
                 irFileLabel.setColour(juce::Label::textColourId, kText);
+                syncIRPresetBox();
             }
         });
 }
@@ -245,16 +325,18 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
 
     // Section separator lines
     g.setColour(kPanel.brighter(0.2f));
-    g.drawHorizontalLine(50,  8.0f, (float)getWidth() - 8.0f);
-    g.drawHorizontalLine(140, 8.0f, (float)getWidth() - 8.0f);
-    g.drawHorizontalLine(350, 8.0f, (float)getWidth() - 8.0f);
+    g.drawHorizontalLine( 50, 8.0f, (float)getWidth() - 8.0f);  // below header
+    g.drawHorizontalLine(140, 8.0f, (float)getWidth() - 8.0f);  // below tuner
+    g.drawHorizontalLine(200, 8.0f, (float)getWidth() - 8.0f);  // below gate
+    g.drawHorizontalLine(410, 8.0f, (float)getWidth() - 8.0f);  // below tone
 
     // Section labels
     g.setColour(kSubText.withAlpha(0.6f));
     g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("TUNER",   12, 52, 60, 14, juce::Justification::centredLeft);
-    g.drawText("TONE",    12, 142, 60, 14, juce::Justification::centredLeft);
-    g.drawText("CABINET", 12, 352, 60, 14, juce::Justification::centredLeft);
+    g.drawText("TUNER",      12,  52, 60, 14, juce::Justification::centredLeft);
+    g.drawText("NOISE GATE", 12, 142, 90, 14, juce::Justification::centredLeft);
+    g.drawText("TONE",       12, 202, 60, 14, juce::Justification::centredLeft);
+    g.drawText("CABINET",    12, 412, 60, 14, juce::Justification::centredLeft);
 }
 
 void GuitarAmpAudioProcessorEditor::resized()
@@ -275,8 +357,15 @@ void GuitarAmpAudioProcessorEditor::resized()
     tunerToggle.setBounds(W - 80, tunerY, 70, tunerH);
     tunerDisplay.setBounds(8, tunerY, W - 96, tunerH);
 
-    // ---- Knobs section (140–350) ---------------------------------------------
-    const int knobAreaY = 158;
+    // ---- Noise gate section (140–200) ----------------------------------------
+    const int gateY  = 155;
+    const int gateH  = 34;
+    gateEnableBtn  .setBounds(8,   gateY,  64, gateH);
+    gateThreshLabel.setBounds(80,  gateY,  80, gateH);
+    gateThreshSlider.setBounds(160, gateY, W - 168, gateH);
+
+    // ---- Knobs section (200–410) ---------------------------------------------
+    const int knobAreaY = 218;
     const int knobAreaH = 185;
     const int knobW     = W / 6;
 
@@ -294,10 +383,14 @@ void GuitarAmpAudioProcessorEditor::resized()
     layoutKnob(presenceSlider, presenceLabel, 4);
     layoutKnob(masterSlider,   masterLabel,   5);
 
-    // ---- IR loader section (350–430) -----------------------------------------
-    const int irY = 368;
-    const int irH = 50;
-    loadIRBtn.setBounds(8,   irY, 100, irH);
-    irOnBtn  .setBounds(116, irY,  76, irH);
-    irFileLabel.setBounds(200, irY, W - 208, irH);
+    // ---- Cabinet section (410–500) -------------------------------------------
+    const int cabY1 = 428;  // preset row
+    const int cabY2 = 466;  // browse row
+    const int rowH  = 30;
+
+    irPresetBox.setBounds(8,       cabY1, W - 104, rowH);
+    irOnBtn    .setBounds(W - 88,  cabY1,      80, rowH);
+
+    loadIRBtn  .setBounds(8,       cabY2,      90, rowH);
+    irFileLabel.setBounds(106,     cabY2, W - 114, rowH);
 }

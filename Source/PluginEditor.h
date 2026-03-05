@@ -49,8 +49,14 @@ private:
     juce::Label  gainLabel, bassLabel, midLabel,
                  trebleLabel, presenceLabel, masterLabel;
 
+    // Noise gate section
+    juce::TextButton gateEnableBtn   { "GATE" };
+    juce::Slider     gateThreshSlider;
+    juce::Label      gateThreshLabel;
+
     // IR loader section
-    juce::TextButton loadIRBtn  { "Load IR..." };
+    juce::ComboBox   irPresetBox;
+    juce::TextButton loadIRBtn  { "Browse..." };
     juce::TextButton irOnBtn    { "IR ON" };
     juce::Label      irFileLabel;
 
@@ -60,7 +66,8 @@ private:
 
     std::unique_ptr<SliderAtt> gainAtt, bassAtt, midAtt,
                                 trebleAtt, presenceAtt, masterAtt;
-    std::unique_ptr<ButtonAtt> irEnabledAtt, tunerEnabledAtt;
+    std::unique_ptr<SliderAtt> gateThreshAtt;
+    std::unique_ptr<ButtonAtt> irEnabledAtt, tunerEnabledAtt, gateEnabledAtt;
 
     // File chooser must outlive its callback
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -70,6 +77,7 @@ private:
     void styleButton(juce::TextButton& b, bool isToggle = false);
     void loadIRFile();
     void syncChannelButtons();
+    void syncIRPresetBox();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarAmpAudioProcessorEditor)
 };

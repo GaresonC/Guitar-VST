@@ -32,6 +32,7 @@ bool IRLoader::loadIR(const juce::File& file)
         juce::dsp::Convolution::Normalise::yes);
 
     fileName = file.getFileName();
+    filePath = file.getFullPathName();
     hasIR    = true;
     return true;
 }

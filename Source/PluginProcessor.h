@@ -40,9 +40,10 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState apvts;
 
-    AmpProcessor ampProcessor;
-    Tuner        tuner;
-    IRLoader     irLoader;
+    AmpProcessor                 ampProcessor;
+    Tuner                        tuner;
+    IRLoader                     irLoader;
+    juce::dsp::NoiseGate<float>  noiseGate;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

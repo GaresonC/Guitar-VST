@@ -77,43 +77,43 @@ void AmpProcessor::updateFilters()
         // Pre-distortion: remove sub-bass to prevent muddy low-end clipping
         *preHpFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighPass(
-                sampleRate, 80.0, 0.7);
+                sampleRate, 80.0f, 0.7f);
 
         // Interstage coupling capacitor simulation (removes low-frequency buildup between stages)
         *interstageHp1Filter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighPass(
-                sampleRate, 120.0, 0.7);
+                sampleRate, 120.0f, 0.7f);
 
         *interstageHp2Filter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighPass(
-                sampleRate, 120.0, 0.7);
+                sampleRate, 120.0f, 0.7f);
 
         // Tone stack
         *bassFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeLowShelf(
-                sampleRate, 250.0, 0.7, bassGain);
+                sampleRate, 250.0f, 0.7f, bassGain);
 
         *midFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-                sampleRate, 750.0, 1.5, midGain);
+                sampleRate, 750.0f, 1.5f, midGain);
 
         *trebleFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-                sampleRate, 3500.0, 0.7, trebleGain);
+                sampleRate, 3500.0f, 0.7f, trebleGain);
 
         // Post-distortion low-pass: tames fizz and aliasing harshness
         *postDistLpFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeLowPass(
-                sampleRate, 7000.0, 0.7);
+                sampleRate, 7000.0f, 0.7f);
 
         // Presence (power-amp stage high shelf)
         *presenceFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-                sampleRate, 5000.0, 0.9, presenceGain);
+                sampleRate, 5000.0f, 0.9f, presenceGain);
 
         *dcBlockFilter[ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighPass(
-                sampleRate, 10.0, 0.7);
+                sampleRate, 10.0f, 0.7f);
     }
 }
 

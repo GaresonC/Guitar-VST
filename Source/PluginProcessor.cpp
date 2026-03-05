@@ -1,6 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+static const juce::String kDefaultIRDir  = "C:/Users/Gary/Documents/Cab IR/Custom IRs/";
+static const juce::String kDefaultIRFile = "Impact Studios_IR 1.wav";
+
 GuitarAmpAudioProcessor::GuitarAmpAudioProcessor()
     : AudioProcessor(BusesProperties()
           .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
@@ -45,10 +48,17 @@ GuitarAmpAudioProcessor::createParameterLayout()
         juce::NormalisableRange<float>(0.0f, 2.0f, 1.0f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{"irEnabled", 1}, "IR Enabled", false));
+        juce::ParameterID{"irEnabled", 1}, "IR Enabled", true));
 
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"tunerEnabled", 1}, "Tuner Enabled", true));
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"noiseGateEnabled", 1}, "Gate Enabled", true));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
+        juce::NormalisableRange<float>(-80.0f, -20.0f), -60.0f));
 
     return { params.begin(), params.end() };
 }
@@ -56,6 +66,17 @@ GuitarAmpAudioProcessor::createParameterLayout()
 //==============================================================================
 void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate       = sampleRate;
+    spec.maximumBlockSize = (juce::uint32)juce::jmax(1, samplesPerBlock);
+    spec.numChannels      = (juce::uint32)juce::jmax(1, getTotalNumInputChannels());
+
+    noiseGate.prepare(spec);
+    noiseGate.setThreshold(apvts.getRawParameterValue("noiseGateThreshold")->load());
+    noiseGate.setAttack(10.0f);
+    noiseGate.setRelease(150.0f);
+    noiseGate.setRatio(10.0f);
+
     ampProcessor.prepare(sampleRate, samplesPerBlock);
     tuner.prepare(sampleRate, samplesPerBlock);
     irLoader.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
@@ -71,6 +92,13 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
         (int)apvts.getRawParameterValue("channel")->load());
 
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
+
+    // Load default IR if none is currently loaded
+    if (!irLoader.hasLoadedIR())
+    {
+        juce::File defaultIR(kDefaultIRDir + kDefaultIRFile);
+        irLoader.loadIR(defaultIR);
+    }
 }
 
 void GuitarAmpAudioProcessor::releaseResources() {}
@@ -84,9 +112,18 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear(ch, 0, buffer.getNumSamples());
 
-    // Tuner runs on the dry signal (channel 0)
+    // Tuner runs on the dry signal (channel 0) before any processing
     if (apvts.getRawParameterValue("tunerEnabled")->load() > 0.5f)
         tuner.process(buffer);
+
+    // Noise gate (pre-amp)
+    noiseGate.setThreshold(apvts.getRawParameterValue("noiseGateThreshold")->load());
+    if (apvts.getRawParameterValue("noiseGateEnabled")->load() > 0.5f)
+    {
+        juce::dsp::AudioBlock<float>              block(buffer);
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        noiseGate.process(ctx);
+    }
 
     // Amp processing
     ampProcessor.update(
@@ -108,6 +145,7 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+    state.setProperty("irFilePath", irLoader.getFilePath(), nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -116,7 +154,14 @@ void GuitarAmpAudioProcessor::setStateInformation(const void* data, int sizeInBy
 {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
     if (xml && xml->hasTagName(apvts.state.getType()))
-        apvts.replaceState(juce::ValueTree::fromXml(*xml));
+    {
+        auto newState = juce::ValueTree::fromXml(*xml);
+        apvts.replaceState(newState);
+
+        juce::String irPath = apvts.state.getProperty("irFilePath", "");
+        if (irPath.isNotEmpty())
+            irLoader.loadIR(juce::File(irPath));
+    }
 }
 
 //==============================================================================
