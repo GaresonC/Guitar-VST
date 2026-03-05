@@ -99,6 +99,7 @@ private:
 
     // Helpers
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
+    void setupLargeKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void styleButton(juce::TextButton& b, bool isToggle = false);
     void loadIRFile();
     void syncIRPresetBox();

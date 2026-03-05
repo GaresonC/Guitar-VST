@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
+# Path to the extracted ASIO SDK folder (must contain "common/asio.h")
+# Download from https://www.steinberg.net/asiosdk
+set(JUCE_ASIO_SUPPORT_PATH "C:/SDKs/ASIOSDK" CACHE PATH "Path to ASIO SDK")
+
 FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
@@ -51,6 +55,12 @@ target_compile_definitions(MFAmp
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_MODAL_LOOPS_PERMITTED=1
+        JUCE_ASIO=1
+)
+
+target_include_directories(MFAmp
+    PRIVATE
+        "${JUCE_ASIO_SUPPORT_PATH}/common"
 )
 
 target_link_libraries(MFAmp
