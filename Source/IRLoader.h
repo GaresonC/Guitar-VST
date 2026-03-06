@@ -10,6 +10,7 @@ public:
     void process(juce::AudioBuffer<float>& buffer);
 
     bool loadIR(const juce::File& file);
+    bool loadIR(const void* data, int sizeBytes, const juce::String& displayName);
     void setEnabled(bool enabled);
 
     bool          isEnabled()     const { return enabled;  }

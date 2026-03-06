@@ -39,10 +39,6 @@ private:
     TunerDisplay tunerDisplay;
     juce::TextButton tunerToggle { "MUTE" };
 
-    // Input channel selector
-    juce::ComboBox inputChannelBox;
-    juce::Label    inputChannelLabel;
-
     // Amp controls
     juce::Slider     gainSlider, masterSlider;
     juce::Label      gainLabel, masterLabel;
@@ -59,6 +55,11 @@ private:
     juce::Slider     pitchSemiSlider;
     juce::Label      pitchSemiLabel;
 
+    // Preset manager
+    juce::ComboBox   presetBox;
+    juce::TextButton savePresetBtn   { "SAVE" };
+    juce::TextButton deletePresetBtn { "DEL"  };
+
     // IR loader section
     juce::ComboBox   irPresetBox;
     juce::TextButton loadIRBtn  { "Browse..." };
@@ -68,6 +69,8 @@ private:
     // Pre-amp EQ
     juce::Slider preEqLowSlider, preEqMidSlider, preEqHighSlider;
     juce::Label  preEqLowLabel, preEqMidLabel, preEqHighLabel;
+    juce::Slider preEqLowFreqSlider, preEqMidFreqSlider, preEqHighFreqSlider;
+    juce::Label  preEqLowFreqLabel, preEqMidFreqLabel, preEqHighFreqLabel;
 
     // Pre-amp compressor
     juce::Slider preCompThreshSlider, preCompRatioSlider;
@@ -78,6 +81,8 @@ private:
     // Post-amp EQ
     juce::Slider postEqLowSlider, postEqMidSlider, postEqHighSlider;
     juce::Label  postEqLowLabel, postEqMidLabel, postEqHighLabel;
+    juce::Slider postEqLowFreqSlider, postEqMidFreqSlider, postEqHighFreqSlider;
+    juce::Label  postEqLowFreqLabel, postEqMidFreqLabel, postEqHighFreqLabel;
 
     // Post-amp compressor
     juce::Slider postCompThreshSlider, postCompRatioSlider;
@@ -94,7 +99,6 @@ private:
     using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
     using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
-    std::unique_ptr<ComboAtt>  inputChannelAtt;
     std::unique_ptr<SliderAtt> gainAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
@@ -103,9 +107,11 @@ private:
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
 
     std::unique_ptr<SliderAtt> preEqLowAtt, preEqMidAtt, preEqHighAtt;
+    std::unique_ptr<SliderAtt> preEqLowFreqAtt, preEqMidFreqAtt, preEqHighFreqAtt;
     std::unique_ptr<SliderAtt> preCompThreshAtt, preCompRatioAtt;
     std::unique_ptr<SliderAtt> preCompAttackAtt, preCompReleaseAtt, preCompMakeupAtt;
     std::unique_ptr<SliderAtt> postEqLowAtt, postEqMidAtt, postEqHighAtt;
+    std::unique_ptr<SliderAtt> postEqLowFreqAtt, postEqMidFreqAtt, postEqHighFreqAtt;
     std::unique_ptr<SliderAtt> postCompThreshAtt, postCompRatioAtt;
     std::unique_ptr<SliderAtt> postCompAttackAtt, postCompReleaseAtt, postCompMakeupAtt;
 
@@ -114,7 +120,13 @@ private:
     std::unique_ptr<juce::FileChooser> modelFileChooser;
 
     // Helpers
+    void refreshPresetList();
+    void saveCurrentPreset();
+    void deleteCurrentPreset();
+    juce::File getPresetDirectory();
+
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
+    void setupFreqSlider(juce::Slider& s, juce::Label& l);
     void setupCompKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void setupLargeKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void styleButton(juce::TextButton& b, bool isToggle = false);

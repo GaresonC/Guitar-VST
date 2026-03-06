@@ -6,18 +6,20 @@
 class StageProcessor
 {
 public:
-    // lowFreqHz / midFreqHz / highFreqHz: EQ band centre frequencies
+    // lowFreqHz / midFreqHz / highFreqHz: default EQ band centre frequencies
     StageProcessor(float lowFreqHz, float midFreqHz, float highFreqHz);
 
     void prepare(double sampleRate, int samplesPerBlock);
     void process(juce::AudioBuffer<float>& buffer);
 
     // lowDb, midDb, highDb: EQ gain in dB
+    // lowHz, midHz, highHz: EQ band centre frequencies in Hz
     // compThreshDb: threshold in dBFS
     // compRatio: linear compression ratio (1 = no compression)
     // compAttackMs / compReleaseMs: envelope timing in milliseconds
     // compMakeupDb: makeup gain applied after compression
     void update(float lowDb, float midDb, float highDb,
+                float lowHz, float midHz, float highHz,
                 float compThreshDb, float compRatio,
                 float compAttackMs, float compReleaseMs,
                 float compMakeupDb);
@@ -25,7 +27,7 @@ public:
 private:
     static constexpr int kMaxChannels = 2;
 
-    const float kLowFreq, kMidFreq, kHighFreq;
+    float kLowFreq, kMidFreq, kHighFreq;
     float attackMs  = 10.0f;
     float releaseMs = 100.0f;
 

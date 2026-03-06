@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <BinaryData.h>
 
 static const juce::String kDefaultIRDir    = "C:/Users/Gary/Documents/Cab IR/Custom IRs/";
 static const juce::String kDefaultIRFile   = "Impact Studios_IR 1.wav";
@@ -19,10 +20,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout
 GuitarAmpAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
-
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{"inputChannel", 1}, "Input Channel",
-        juce::StringArray{"1","2","3","4","5","6","7","8"}, 0));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"inputGain", 1}, "Input Gain",
@@ -63,6 +60,15 @@ GuitarAmpAudioProcessor::createParameterLayout()
         juce::ParameterID{"preEqHigh", 1}, "Pre EQ High",
         juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqLowFreq",  1}, "Pre EQ Low Freq",
+        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 200.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqMidFreq",  1}, "Pre EQ Mid Freq",
+        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 700.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preEqHighFreq", 1}, "Pre EQ High Freq",
+        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 4500.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompThresh", 1}, "Pre Comp Thresh",
         juce::NormalisableRange<float>(-60.0f, 0.0f), -20.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -88,6 +94,15 @@ GuitarAmpAudioProcessor::createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqHigh", 1}, "Post EQ High",
         juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqLowFreq",  1}, "Post EQ Low Freq",
+        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 150.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqMidFreq",  1}, "Post EQ Mid Freq",
+        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 1000.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postEqHighFreq", 1}, "Post EQ High Freq",
+        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 5000.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompThresh", 1}, "Post Comp Thresh",
         juce::NormalisableRange<float>(-60.0f, 0.0f), -18.0f));
@@ -155,11 +170,27 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
 
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
 
-    // Load default IR if none is currently loaded
+    // Load default IR if none is currently loaded — use first bundled IR
     if (!irLoader.hasLoadedIR())
     {
+        // Try the old file-based default first, fall back to first bundled IR
         juce::File defaultIR(kDefaultIRDir + kDefaultIRFile);
-        irLoader.loadIR(defaultIR);
+        if (!irLoader.loadIR(defaultIR) && BinaryData::namedResourceListSize > 0)
+        {
+            // Find the first _wav resource and load it
+            for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+            {
+                juce::String resName(BinaryData::namedResourceList[i]);
+                if (resName.endsWith("_wav"))
+                {
+                    int irSize = 0;
+                    const char* irData = BinaryData::getNamedResource(resName.toRawUTF8(), irSize);
+                    juce::String displayName = resName.dropLastCharacters(4).replaceCharacter('_', ' ');
+                    irLoader.loadIR(irData, irSize, displayName);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -168,7 +199,7 @@ void GuitarAmpAudioProcessor::releaseResources() {}
 bool GuitarAmpAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
     // Output must be mono or stereo
-    auto& out = layouts.getMainOutputChannelSet();
+    const auto& out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
         return false;
 
@@ -185,16 +216,10 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
 
-    const int numIn  = getTotalNumInputChannels();
     const int numOut = getTotalNumOutputChannels();
 
-    // Route the user-selected input channel to channel 0 for mono processing
-    const int selectedCh = juce::roundToInt(
-        apvts.getRawParameterValue("inputChannel")->load()); // 0-indexed (0 = Input 1)
-    if (selectedCh > 0 && selectedCh < numIn)
-        buffer.copyFrom(0, 0, buffer, selectedCh, 0, buffer.getNumSamples());
-
     // Zero all channels above 0 — we process mono through ch0
+    // (the user selects the exact input channel via the JUCE audio settings panel)
     for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
         buffer.clear(ch, 0, buffer.getNumSamples());
 
@@ -223,6 +248,9 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         apvts.getRawParameterValue("preEqLow")->load(),
         apvts.getRawParameterValue("preEqMid")->load(),
         apvts.getRawParameterValue("preEqHigh")->load(),
+        apvts.getRawParameterValue("preEqLowFreq")->load(),
+        apvts.getRawParameterValue("preEqMidFreq")->load(),
+        apvts.getRawParameterValue("preEqHighFreq")->load(),
         apvts.getRawParameterValue("preCompThresh")->load(),
         apvts.getRawParameterValue("preCompRatio")->load(),
         apvts.getRawParameterValue("preCompAttack")->load(),
@@ -241,6 +269,9 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         apvts.getRawParameterValue("postEqLow")->load(),
         apvts.getRawParameterValue("postEqMid")->load(),
         apvts.getRawParameterValue("postEqHigh")->load(),
+        apvts.getRawParameterValue("postEqLowFreq")->load(),
+        apvts.getRawParameterValue("postEqMidFreq")->load(),
+        apvts.getRawParameterValue("postEqHighFreq")->load(),
         apvts.getRawParameterValue("postCompThresh")->load(),
         apvts.getRawParameterValue("postCompRatio")->load(),
         apvts.getRawParameterValue("postCompAttack")->load(),
@@ -276,8 +307,10 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
-    state.setProperty("irFilePath",    irLoader.getFilePath(),        nullptr);
-    state.setProperty("ampModelPath",  neuralAmp.getModelFilePath(),  nullptr);
+    state.setProperty("irFilePath",    irLoader.getFilePath(),       nullptr);
+    state.setProperty("bundledIRName", irLoader.getFilePath().isEmpty()
+                                           ? irLoader.getFileName() : "",  nullptr);
+    state.setProperty("ampModelPath",  neuralAmp.getModelFilePath(), nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -292,7 +325,23 @@ void GuitarAmpAudioProcessor::setStateInformation(const void* data, int sizeInBy
 
         juce::String irPath = apvts.state.getProperty("irFilePath", "");
         if (irPath.isNotEmpty())
+        {
             irLoader.loadIR(juce::File(irPath));
+        }
+        else
+        {
+            // Try to restore a bundled IR by name
+            juce::String bundledName = apvts.state.getProperty("bundledIRName", "");
+            if (bundledName.isNotEmpty())
+            {
+                // BinaryData resource name = displayName (with spaces) converted to underscores + "_wav"
+                juce::String resName = bundledName.replaceCharacter(' ', '_') + "_wav";
+                int irSize = 0;
+                const char* irData = BinaryData::getNamedResource(resName.toRawUTF8(), irSize);
+                if (irData != nullptr)
+                    irLoader.loadIR(irData, irSize, bundledName);
+            }
+        }
 
         juce::String ampModelPath = apvts.state.getProperty("ampModelPath", "");
         if (ampModelPath.isNotEmpty())

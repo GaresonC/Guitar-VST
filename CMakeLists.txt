@@ -46,6 +46,10 @@ juce_add_plugin(MFAmp
 
 juce_generate_juce_header(MFAmp)
 
+# Bundle all IR WAV files from the IRs/ directory into the binary
+file(GLOB IR_FILES "${CMAKE_CURRENT_SOURCE_DIR}/IRs/*.wav")
+juce_add_binary_data(MFAmpIRData SOURCES ${IR_FILES})
+
 target_sources(MFAmp
     PRIVATE
         Source/PluginProcessor.cpp
@@ -79,6 +83,7 @@ target_link_libraries(MFAmp
         juce::juce_audio_utils
         juce::juce_dsp
         RTNeural
+        MFAmpIRData
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

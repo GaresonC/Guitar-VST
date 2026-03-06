@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <BinaryData.h>
 
 //==============================================================================
 // Colour palette
@@ -13,7 +14,6 @@ static const juce::Colour kBtnActive { 0xffcc4400 };
 static const juce::Colour kBtnIdle   { 0xff333333 };
 
 static const juce::String kIRDir     = "C:/Users/Gary/Documents/Cab IR/Custom IRs/";
-static const int kNumPresetIRs       = 12;
 
 //==============================================================================
 TunerDisplay::TunerDisplay(GuitarAmpAudioProcessor& p) : processor(p)
@@ -99,23 +99,6 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
 {
     setSize(1650, 300);
 
-    // ---- Input channel selector -------------------------------------------
-    for (int i = 1; i <= 8; ++i)
-        inputChannelBox.addItem("Input " + juce::String(i), i);
-
-    inputChannelBox.setColour(juce::ComboBox::backgroundColourId, kPanel);
-    inputChannelBox.setColour(juce::ComboBox::textColourId,       kText);
-    inputChannelBox.setColour(juce::ComboBox::outlineColourId,    kBtnIdle.brighter(0.2f));
-    inputChannelBox.setColour(juce::ComboBox::arrowColourId,      kAccent);
-    addAndMakeVisible(inputChannelBox);
-    inputChannelAtt = std::make_unique<ComboAtt>(audioProcessor.apvts, "inputChannel", inputChannelBox);
-
-    inputChannelLabel.setText("IN CH", juce::dontSendNotification);
-    inputChannelLabel.setFont(juce::Font(11.0f, juce::Font::bold));
-    inputChannelLabel.setColour(juce::Label::textColourId, kSubText);
-    inputChannelLabel.setJustificationType(juce::Justification::centredRight);
-    addAndMakeVisible(inputChannelLabel);
-
     // ---- Tuner display + mute button -----------------------------------------
     addAndMakeVisible(tunerDisplay);
 
@@ -156,6 +139,14 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     preEqMidAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqMid",  preEqMidSlider);
     preEqHighAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqHigh", preEqHighSlider);
 
+    setupFreqSlider(preEqLowFreqSlider,  preEqLowFreqLabel);
+    setupFreqSlider(preEqMidFreqSlider,  preEqMidFreqLabel);
+    setupFreqSlider(preEqHighFreqSlider, preEqHighFreqLabel);
+
+    preEqLowFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqLowFreq",  preEqLowFreqSlider);
+    preEqMidFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqMidFreq",  preEqMidFreqSlider);
+    preEqHighFreqAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqHighFreq", preEqHighFreqSlider);
+
     // ---- Pre-amp compressor -------------------------------------------------
     setupCompKnob(preCompThreshSlider,  preCompThreshLabel,  "THRESH");
     setupCompKnob(preCompRatioSlider,   preCompRatioLabel,   "RATIO");
@@ -181,6 +172,14 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     postEqLowAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqLow",  postEqLowSlider);
     postEqMidAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqMid",  postEqMidSlider);
     postEqHighAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqHigh", postEqHighSlider);
+
+    setupFreqSlider(postEqLowFreqSlider,  postEqLowFreqLabel);
+    setupFreqSlider(postEqMidFreqSlider,  postEqMidFreqLabel);
+    setupFreqSlider(postEqHighFreqSlider, postEqHighFreqLabel);
+
+    postEqLowFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqLowFreq",  postEqLowFreqSlider);
+    postEqMidFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqMidFreq",  postEqMidFreqSlider);
+    postEqHighFreqAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqHighFreq", postEqHighFreqSlider);
 
     // ---- Post-amp compressor ------------------------------------------------
     setupCompKnob(postCompThreshSlider,  postCompThreshLabel,  "THRESH");
@@ -229,9 +228,20 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     }
 
     // ---- IR loader -----------------------------------------------------------
-    // Preset combobox
-    for (int i = 1; i <= kNumPresetIRs; ++i)
-        irPresetBox.addItem("Impact Studios - IR " + juce::String(i), i);
+    // Preset combobox — populated from bundled BinaryData IRs
+    {
+        int id = 1;
+        for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+        {
+            juce::String resName(BinaryData::namedResourceList[i]);
+            if (resName.endsWith("_wav"))
+            {
+                juce::String displayName = resName.dropLastCharacters(4)
+                                               .replaceCharacter('_', ' ');
+                irPresetBox.addItem(displayName, id++);
+            }
+        }
+    }
 
     irPresetBox.setColour(juce::ComboBox::backgroundColourId,  kPanel);
     irPresetBox.setColour(juce::ComboBox::textColourId,        kText);
@@ -240,15 +250,29 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     irPresetBox.setTextWhenNothingSelected("Custom IR");
     irPresetBox.onChange = [this]
     {
-        int id = irPresetBox.getSelectedId();
-        if (id >= 1 && id <= kNumPresetIRs)
+        const int id = irPresetBox.getSelectedId();
+        if (id < 1) return;
+
+        // Map ComboBox id back to the i-th _wav resource
+        int wavIndex = 0;
+        for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
         {
-            juce::File irFile(kIRDir + "Impact Studios_IR " + juce::String(id) + ".wav");
-            if (audioProcessor.irLoader.loadIR(irFile))
+            juce::String resName(BinaryData::namedResourceList[i]);
+            if (resName.endsWith("_wav"))
             {
-                irFileLabel.setText(audioProcessor.irLoader.getFileName(),
-                                    juce::dontSendNotification);
-                irFileLabel.setColour(juce::Label::textColourId, kText);
+                ++wavIndex;
+                if (wavIndex == id)
+                {
+                    int size = 0;
+                    const char* data = BinaryData::getNamedResource(resName.toRawUTF8(), size);
+                    juce::String displayName = irPresetBox.getItemText(id - 1);
+                    if (audioProcessor.irLoader.loadIR(data, size, displayName))
+                    {
+                        irFileLabel.setText(displayName, juce::dontSendNotification);
+                        irFileLabel.setColour(juce::Label::textColourId, kText);
+                    }
+                    break;
+                }
             }
         }
     };
@@ -282,6 +306,52 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
         irFileLabel.setText("No IR loaded", juce::dontSendNotification);
     }
     syncIRPresetBox();
+
+    // ---- Preset manager -------------------------------------------------------
+    presetBox.setTextWhenNothingSelected("-- Select Preset --");
+    presetBox.setColour(juce::ComboBox::backgroundColourId, kPanel);
+    presetBox.setColour(juce::ComboBox::textColourId,       kText);
+    presetBox.setColour(juce::ComboBox::outlineColourId,    kBtnIdle.brighter(0.2f));
+    presetBox.setColour(juce::ComboBox::arrowColourId,      kAccent);
+    presetBox.onChange = [this]
+    {
+        const juce::String name = presetBox.getText();
+        if (name.isEmpty()) return;
+        juce::File presetFile = getPresetDirectory().getChildFile(name + ".xml");
+        if (!presetFile.existsAsFile()) return;
+
+        auto xml = juce::XmlDocument::parse(presetFile);
+        if (!xml) return;
+
+        auto newState = juce::ValueTree::fromXml(*xml);
+        audioProcessor.apvts.replaceState(newState);
+
+        juce::String irPath = audioProcessor.apvts.state.getProperty("irFilePath", "");
+        if (irPath.isNotEmpty() && audioProcessor.irLoader.loadIR(juce::File(irPath)))
+        {
+            irFileLabel.setText(audioProcessor.irLoader.getFileName(), juce::dontSendNotification);
+            irFileLabel.setColour(juce::Label::textColourId, kText);
+            syncIRPresetBox();
+        }
+
+        juce::String ampModelPath = audioProcessor.apvts.state.getProperty("ampModelPath", "");
+        if (ampModelPath.isNotEmpty() && audioProcessor.neuralAmp.loadModel(juce::File(ampModelPath)))
+        {
+            modelFileLabel.setText(audioProcessor.neuralAmp.getModelFileName(), juce::dontSendNotification);
+            modelFileLabel.setColour(juce::Label::textColourId, kText);
+        }
+    };
+    addAndMakeVisible(presetBox);
+
+    styleButton(savePresetBtn, false);
+    savePresetBtn.onClick = [this] { saveCurrentPreset(); };
+    addAndMakeVisible(savePresetBtn);
+
+    styleButton(deletePresetBtn, false);
+    deletePresetBtn.onClick = [this] { deleteCurrentPreset(); };
+    addAndMakeVisible(deletePresetBtn);
+
+    refreshPresetList();
 
     // ---- Post-IR 8-band EQ --------------------------------------------------
     static const char* kEqParamIds[EQProcessor::kNumBands] = {
@@ -338,6 +408,27 @@ void GuitarAmpAudioProcessorEditor::setupKnob(juce::Slider& s, juce::Label& l,
     addAndMakeVisible(l);
 }
 
+void GuitarAmpAudioProcessorEditor::setupFreqSlider(juce::Slider& s, juce::Label& l)
+{
+    s.setSliderStyle(juce::Slider::LinearBar);
+    s.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 48, 14);
+    s.setColour(juce::Slider::trackColourId,         kAccent.withAlpha(0.6f));
+    s.setColour(juce::Slider::thumbColourId,         kAccent);
+    s.setColour(juce::Slider::backgroundColourId,    kBg);
+    s.setColour(juce::Slider::textBoxTextColourId,   kSubText);
+    s.setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    s.setTextValueSuffix(" Hz");
+    s.setDoubleClickReturnValue(true, 0.0);
+    addAndMakeVisible(s);
+
+    l.setText("FREQ", juce::dontSendNotification);
+    l.setFont(juce::Font(9.0f));
+    l.setColour(juce::Label::textColourId, kSubText.withAlpha(0.6f));
+    l.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(l);
+}
+
 void GuitarAmpAudioProcessorEditor::setupCompKnob(juce::Slider& s, juce::Label& l,
                                                     const juce::String& name)
 {
@@ -389,16 +480,107 @@ void GuitarAmpAudioProcessorEditor::styleButton(juce::TextButton& b, bool isTogg
 
 void GuitarAmpAudioProcessorEditor::syncIRPresetBox()
 {
-    const juce::String name = audioProcessor.irLoader.getFileName();
-    for (int i = 1; i <= kNumPresetIRs; ++i)
+    // The loaded IR name matches a bundled IR's display name (spaces replacing underscores)
+    const juce::String loadedName = audioProcessor.irLoader.getFileName();
+    for (int i = 1; i <= irPresetBox.getNumItems(); ++i)
     {
-        if (name == "Impact Studios_IR " + juce::String(i) + ".wav")
+        if (irPresetBox.getItemText(i - 1) == loadedName)
         {
             irPresetBox.setSelectedId(i, juce::dontSendNotification);
             return;
         }
     }
     irPresetBox.setSelectedId(0, juce::dontSendNotification);
+}
+
+juce::File GuitarAmpAudioProcessorEditor::getPresetDirectory()
+{
+    auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                   .getChildFile("MF_AMP/Presets");
+    dir.createDirectory();
+    return dir;
+}
+
+void GuitarAmpAudioProcessorEditor::refreshPresetList()
+{
+    const juce::String currentName = presetBox.getText();
+    presetBox.clear(juce::dontSendNotification);
+
+    auto files = getPresetDirectory().findChildFiles(
+        juce::File::findFiles, false, "*.xml");
+    files.sort();
+
+    int id = 1;
+    for (const auto& f : files)
+        presetBox.addItem(f.getFileNameWithoutExtension(), id++);
+
+    // Restore selection by name
+    for (int i = 1; i <= presetBox.getNumItems(); ++i)
+    {
+        if (presetBox.getItemText(i - 1) == currentName)
+        {
+            presetBox.setSelectedId(i, juce::dontSendNotification);
+            return;
+        }
+    }
+}
+
+void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
+{
+    auto* aw = new juce::AlertWindow("Save Preset", "Enter a name for this preset:",
+                                     juce::MessageBoxIconType::NoIcon);
+    aw->addTextEditor("name", presetBox.getText(), "Preset name:");
+    aw->addButton("Save",   1, juce::KeyPress(juce::KeyPress::returnKey));
+    aw->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    aw->enterModalState(true,
+        juce::ModalCallbackFunction::create([this, aw](int result)
+        {
+            if (result == 1)
+            {
+                juce::String name = aw->getTextEditorContents("name").trim()
+                                       .replaceCharacters("\\/:*?\"<>|", "_________");
+                if (name.isEmpty()) return;
+
+                auto state = audioProcessor.apvts.copyState();
+                state.setProperty("irFilePath",
+                    audioProcessor.irLoader.getFilePath(), nullptr);
+                state.setProperty("ampModelPath",
+                    audioProcessor.neuralAmp.getModelFilePath(), nullptr);
+
+                auto xml = state.createXml();
+                xml->writeTo(getPresetDirectory().getChildFile(name + ".xml"));
+
+                refreshPresetList();
+                for (int i = 1; i <= presetBox.getNumItems(); ++i)
+                    if (presetBox.getItemText(i - 1) == name)
+                        { presetBox.setSelectedId(i, juce::dontSendNotification); break; }
+            }
+        }),
+        true /* deleteWhenDismissed */);
+}
+
+void GuitarAmpAudioProcessorEditor::deleteCurrentPreset()
+{
+    const juce::String name = presetBox.getText();
+    if (name.isEmpty()) return;
+
+    juce::File presetFile = getPresetDirectory().getChildFile(name + ".xml");
+    if (!presetFile.existsAsFile()) return;
+
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon,
+        "Delete Preset",
+        "Delete preset \"" + name + "\"?",
+        "Delete", "Cancel", nullptr,
+        juce::ModalCallbackFunction::create([this, presetFile](int result)
+        {
+            if (result == 1)
+            {
+                presetFile.deleteFile();
+                refreshPresetList();
+            }
+        }));
 }
 
 void GuitarAmpAudioProcessorEditor::loadModelFile()
@@ -548,10 +730,13 @@ void GuitarAmpAudioProcessorEditor::resized()
     const int boxH = H - boxY - 6;
 
     // === Header ===
-    inputChannelLabel.setBounds(W - 195, 19, 52, 14);
-    inputChannelBox  .setBounds(W - 139, 12, 131, 30);
-    tunerToggle .setBounds(148, 14, 70, 28);
-    tunerDisplay.setBounds(224,  8, W - 428, 40);
+    // Preset bar on the right: [presetBox 130px] [SAVE 38px] [DEL 36px] + gaps + right margin 8px
+    // Total right block: 8 + 36 + 4 + 38 + 4 + 130 = 220px
+    deletePresetBtn.setBounds(W - 44,  12, 36, 26);
+    savePresetBtn  .setBounds(W - 86,  12, 38, 26);
+    presetBox      .setBounds(W - 220, 12, 130, 26);
+    tunerToggle    .setBounds(148, 14, 70, 28);
+    tunerDisplay   .setBounds(224,  8, W - 450, 40);
 
     // === NOISE GATE ===
     {
@@ -569,17 +754,23 @@ void GuitarAmpAudioProcessorEditor::resized()
         pitchSemiSlider.setBounds(x + 6,             boxY + 79, w - 12, 140);
     }
 
-    // === PRE EQ (3 knobs) ===
+    // === PRE EQ (3 knobs + freq sliders) ===
     {
-        const int x = xPreEQ, w = wPreEQ;
+        const int x    = xPreEQ, w = wPreEQ;
         const int colW = (w - 10) / 3;   // ~51px
-        const int y0   = boxY + 71;
-        preEqLowLabel  .setBounds(x + 5,           y0,      colW, 14);
-        preEqLowSlider .setBounds(x + 5,           y0 + 14, colW, 100);
-        preEqMidLabel  .setBounds(x + 5 + colW,    y0,      colW, 14);
-        preEqMidSlider .setBounds(x + 5 + colW,    y0 + 14, colW, 100);
-        preEqHighLabel .setBounds(x + 5 + colW*2,  y0,      colW, 14);
-        preEqHighSlider.setBounds(x + 5 + colW*2,  y0 + 14, colW, 100);
+        const int y0   = boxY + 55;
+        preEqLowLabel       .setBounds(x + 5,          y0,       colW, 14);
+        preEqLowSlider      .setBounds(x + 5,          y0 + 14,  colW, 90);
+        preEqLowFreqLabel   .setBounds(x + 5,          y0 + 106, colW, 12);
+        preEqLowFreqSlider  .setBounds(x + 5,          y0 + 118, colW, 16);
+        preEqMidLabel       .setBounds(x + 5 + colW,   y0,       colW, 14);
+        preEqMidSlider      .setBounds(x + 5 + colW,   y0 + 14,  colW, 90);
+        preEqMidFreqLabel   .setBounds(x + 5 + colW,   y0 + 106, colW, 12);
+        preEqMidFreqSlider  .setBounds(x + 5 + colW,   y0 + 118, colW, 16);
+        preEqHighLabel      .setBounds(x + 5 + colW*2, y0,       colW, 14);
+        preEqHighSlider     .setBounds(x + 5 + colW*2, y0 + 14,  colW, 90);
+        preEqHighFreqLabel  .setBounds(x + 5 + colW*2, y0 + 106, colW, 12);
+        preEqHighFreqSlider .setBounds(x + 5 + colW*2, y0 + 118, colW, 16);
     }
 
     // === PRE COMP (5 knobs: Thresh | Ratio | Attack | Release | Makeup) ===
@@ -622,17 +813,23 @@ void GuitarAmpAudioProcessorEditor::resized()
         irFileLabel.setBounds(x + 6,           boxY + 88, w - 12, 56);
     }
 
-    // === POST EQ (3 knobs) ===
+    // === POST EQ (3 knobs + freq sliders) ===
     {
-        const int x = xPostEQ, w = wPostEQ;
+        const int x    = xPostEQ, w = wPostEQ;
         const int colW = (w - 10) / 3;
-        const int y0   = boxY + 71;
-        postEqLowLabel  .setBounds(x + 5,          y0,      colW, 14);
-        postEqLowSlider .setBounds(x + 5,          y0 + 14, colW, 100);
-        postEqMidLabel  .setBounds(x + 5 + colW,   y0,      colW, 14);
-        postEqMidSlider .setBounds(x + 5 + colW,   y0 + 14, colW, 100);
-        postEqHighLabel .setBounds(x + 5 + colW*2, y0,      colW, 14);
-        postEqHighSlider.setBounds(x + 5 + colW*2, y0 + 14, colW, 100);
+        const int y0   = boxY + 55;
+        postEqLowLabel       .setBounds(x + 5,          y0,       colW, 14);
+        postEqLowSlider      .setBounds(x + 5,          y0 + 14,  colW, 90);
+        postEqLowFreqLabel   .setBounds(x + 5,          y0 + 106, colW, 12);
+        postEqLowFreqSlider  .setBounds(x + 5,          y0 + 118, colW, 16);
+        postEqMidLabel       .setBounds(x + 5 + colW,   y0,       colW, 14);
+        postEqMidSlider      .setBounds(x + 5 + colW,   y0 + 14,  colW, 90);
+        postEqMidFreqLabel   .setBounds(x + 5 + colW,   y0 + 106, colW, 12);
+        postEqMidFreqSlider  .setBounds(x + 5 + colW,   y0 + 118, colW, 16);
+        postEqHighLabel      .setBounds(x + 5 + colW*2, y0,       colW, 14);
+        postEqHighSlider     .setBounds(x + 5 + colW*2, y0 + 14,  colW, 90);
+        postEqHighFreqLabel  .setBounds(x + 5 + colW*2, y0 + 106, colW, 12);
+        postEqHighFreqSlider .setBounds(x + 5 + colW*2, y0 + 118, colW, 16);
     }
 
     // === POST COMP (5 knobs: Thresh | Ratio | Attack | Release | Makeup) ===

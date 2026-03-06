@@ -1,8 +1,11 @@
 #include "StageProcessor.h"
 
 StageProcessor::StageProcessor(float lowFreqHz, float midFreqHz, float highFreqHz)
-    : kLowFreq(lowFreqHz), kMidFreq(midFreqHz), kHighFreq(highFreqHz)
-{}
+{
+    kLowFreq  = lowFreqHz;
+    kMidFreq  = midFreqHz;
+    kHighFreq = highFreqHz;
+}
 
 void StageProcessor::prepare(double sr, int samplesPerBlock)
 {
@@ -29,12 +32,18 @@ void StageProcessor::prepare(double sr, int samplesPerBlock)
 }
 
 void StageProcessor::update(float newLow, float newMid, float newHigh,
+                             float newLowHz, float newMidHz, float newHighHz,
                              float newThresh, float newRatio,
                              float newAttackMs, float newReleaseMs,
                              float newMakeupDb)
 {
-    const bool eqChanged  = (lowGainDb  != newLow || midGainDb != newMid || highGainDb != newHigh);
+    const bool eqChanged  = (lowGainDb  != newLow  || midGainDb  != newMid  || highGainDb  != newHigh
+                           || kLowFreq  != newLowHz || kMidFreq  != newMidHz || kHighFreq  != newHighHz);
     const bool envChanged = (attackMs   != newAttackMs || releaseMs != newReleaseMs);
+
+    kLowFreq  = newLowHz;
+    kMidFreq  = newMidHz;
+    kHighFreq = newHighHz;
 
     lowGainDb      = newLow;
     midGainDb      = newMid;

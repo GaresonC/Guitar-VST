@@ -37,6 +37,23 @@ bool IRLoader::loadIR(const juce::File& file)
     return true;
 }
 
+bool IRLoader::loadIR(const void* data, int sizeBytes, const juce::String& displayName)
+{
+    if (data == nullptr || sizeBytes <= 0) return false;
+
+    convolution.loadImpulseResponse(
+        data, (size_t)sizeBytes,
+        juce::dsp::Convolution::Stereo::no,
+        juce::dsp::Convolution::Trim::yes,
+        0,
+        juce::dsp::Convolution::Normalise::yes);
+
+    fileName = displayName;
+    filePath = "";  // Bundled IRs have no file path
+    hasIR    = true;
+    return true;
+}
+
 void IRLoader::setEnabled(bool e)
 {
     enabled = e;
