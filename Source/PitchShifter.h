@@ -37,6 +37,7 @@ private:
 
     juce::dsp::FFT fft { kFFTOrder };
     float window [kFFTSize]     = {};
+    float fftIn  [kFFTSize * 2] = {};   // separate input copy to avoid in-place FFT UB
     float fftWork[kFFTSize * 2] = {};   // interleaved complex work buffer
 
     int prevSemitones = 0;

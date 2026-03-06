@@ -5,7 +5,7 @@ void PitchShifter::prepare (double /*sampleRate*/, int /*maxBlockSize*/)
     // Hann window
     for (int i = 0; i < kFFTSize; ++i)
         window[i] = 0.5f * (1.0f - std::cos (juce::MathConstants<float>::twoPi
-                                              * (float)i / (float)(kFFTSize - 1)));
+                                              * (float)i / (float)kFFTSize));
     reset();
 }
 
@@ -38,7 +38,8 @@ void PitchShifter::processHop (Channel& ch, float pitchRatio)
         fftWork[2 * i + 1] = 0.0f;
     }
 
-    fft.perform (reinterpret_cast<Complex*> (fftWork),
+    std::copy (fftWork, fftWork + kFFTSize * 2, fftIn);
+    fft.perform (reinterpret_cast<Complex*> (fftIn),
                  reinterpret_cast<Complex*> (fftWork), false);
 
     // ---- Phase vocoder: true-frequency estimation + bin remapping ----------
@@ -104,14 +105,14 @@ void PitchShifter::processHop (Channel& ch, float pitchRatio)
                  reinterpret_cast<Complex*> (fftWork), true);
 
     // ---- Overlap-add -------------------------------------------------------
-    // Scale = 1 / (2 * N):  compensates for JUCE's un-normalised IFFT (×N)
-    // and the OLA sum of 4× Hann windows (= 2).
-    const float scale = 1.0f / (2.0f * (float)kFFTSize);
+    // Scale = 1 / (1.5 * N):  compensates for JUCE's un-normalised IFFT (×N)
+    // and the OLA sum of analysis×synthesis Hann² windows at 4× overlap (= 1.5).
+    const float scale = 1.0f / (1.5f * (float)kFFTSize);
 
     for (int i = 0; i < kFFTSize; ++i)
     {
         int pos = (ch.outReadPos + i) % (kFFTSize * 2);
-        ch.outBuf[pos] += fftWork[2 * i] * scale;
+        ch.outBuf[pos] += fftWork[2 * i] * window[i] * scale;
     }
 }
 
