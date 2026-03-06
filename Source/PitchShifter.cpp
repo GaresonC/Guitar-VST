@@ -42,7 +42,8 @@ void PitchShifter::processHop (Channel& ch, float pitchRatio)
                  reinterpret_cast<Complex*> (fftWork), false);
 
     // ---- Phase vocoder: true-frequency estimation + bin remapping ----------
-    float outMag[kNumBins] = {};
+    float outMag   [kNumBins] = {};
+    float outPhsInc[kNumBins] = {};  // magnitude-weighted phase increment, applied once per dest bin
 
     for (int k = 0; k < kNumBins; ++k)
     {
@@ -69,11 +70,19 @@ void PitchShifter::processHop (Channel& ch, float pitchRatio)
         const int destK = juce::roundToInt (trueFreq * pitchRatio);
         if (destK >= 0 && destK < kNumBins)
         {
+            // Accumulate magnitude; track magnitude-weighted phase increment so that
+            // when multiple source bins land on the same destK (common for downward
+            // shifts) we still only apply one phase step per hop per dest bin.
+            outPhsInc[destK] += mag * twoPi * trueFreq * pitchRatio
+                                 * (float)kHopSize / (float)kFFTSize;
             outMag[destK] += mag;
-            ch.synthPhs[destK] += twoPi * trueFreq * pitchRatio
-                                  * (float)kHopSize / (float)kFFTSize;
         }
     }
+
+    // Apply exactly one phase increment per dest bin (magnitude-weighted average).
+    for (int k = 0; k < kNumBins; ++k)
+        if (outMag[k] > 0.0f)
+            ch.synthPhs[k] += outPhsInc[k] / outMag[k];
 
     // ---- Synthesis: build spectrum + inverse FFT ---------------------------
     std::fill (fftWork, fftWork + kFFTSize * 2, 0.0f);
@@ -111,7 +120,19 @@ void PitchShifter::process (juce::AudioBuffer<float>& buffer, int semitones)
 {
     // True bypass — no state changes, no latency
     if (semitones == 0)
+    {
+        prevSemitones = 0;
         return;
+    }
+
+    // When the pitch setting changes, stale synthPhs/lastPhs from the old ratio
+    // would produce wrong phase estimates and fill outBuf with garbage.  Reset
+    // cleanly so the new pitch ramps in from a known state.
+    if (semitones != prevSemitones)
+    {
+        reset();
+        prevSemitones = semitones;
+    }
 
     const float pitchRatio = std::pow (2.0f, (float)semitones / 12.0f);
     const int   numCh      = std::min (buffer.getNumChannels(), 2);

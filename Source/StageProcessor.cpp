@@ -1,9 +1,7 @@
 #include "StageProcessor.h"
 
-StageProcessor::StageProcessor(float lowFreqHz, float midFreqHz, float highFreqHz,
-                                float attackMs,  float releaseMs)
-    : kLowFreq(lowFreqHz), kMidFreq(midFreqHz), kHighFreq(highFreqHz),
-      kAttackMs(attackMs),  kReleaseMs(releaseMs)
+StageProcessor::StageProcessor(float lowFreqHz, float midFreqHz, float highFreqHz)
+    : kLowFreq(lowFreqHz), kMidFreq(midFreqHz), kHighFreq(highFreqHz)
 {}
 
 void StageProcessor::prepare(double sr, int samplesPerBlock)
@@ -24,25 +22,38 @@ void StageProcessor::prepare(double sr, int samplesPerBlock)
     }
 
     const float sr_f = (float)sr;
-    attackCoeff  = std::exp(-1.0f / (kAttackMs  * 0.001f * sr_f));
-    releaseCoeff = std::exp(-1.0f / (kReleaseMs * 0.001f * sr_f));
+    attackCoeff  = std::exp(-1.0f / (attackMs  * 0.001f * sr_f));
+    releaseCoeff = std::exp(-1.0f / (releaseMs * 0.001f * sr_f));
 
     updateFilters();
 }
 
 void StageProcessor::update(float newLow, float newMid, float newHigh,
-                             float newThresh, float newRatio)
+                             float newThresh, float newRatio,
+                             float newAttackMs, float newReleaseMs,
+                             float newMakeupDb)
 {
-    const bool eqChanged = (lowGainDb != newLow || midGainDb != newMid || highGainDb != newHigh);
+    const bool eqChanged  = (lowGainDb  != newLow || midGainDb != newMid || highGainDb != newHigh);
+    const bool envChanged = (attackMs   != newAttackMs || releaseMs != newReleaseMs);
 
-    lowGainDb    = newLow;
-    midGainDb    = newMid;
-    highGainDb   = newHigh;
-    compThreshDb = newThresh;
-    compRatio    = juce::jmax(1.0f, newRatio);
+    lowGainDb      = newLow;
+    midGainDb      = newMid;
+    highGainDb     = newHigh;
+    compThreshDb   = newThresh;
+    compRatio      = juce::jmax(1.0f, newRatio);
+    compMakeupGain = juce::Decibels::decibelsToGain(newMakeupDb);
 
     if (eqChanged)
         updateFilters();
+
+    if (envChanged && sampleRate > 0.0)
+    {
+        attackMs  = newAttackMs;
+        releaseMs = newReleaseMs;
+        const float sr_f = (float)sampleRate;
+        attackCoeff  = std::exp(-1.0f / (attackMs  * 0.001f * sr_f));
+        releaseCoeff = std::exp(-1.0f / (releaseMs * 0.001f * sr_f));
+    }
 }
 
 void StageProcessor::updateFilters()
@@ -99,6 +110,7 @@ void StageProcessor::process(juce::AudioBuffer<float>& buffer)
             x = midFilter [ch].processSample(x);
             x = highFilter[ch].processSample(x);
             x = applyComp(x, env[ch]);
+            x *= compMakeupGain;
             data[i] = x;
         }
     }

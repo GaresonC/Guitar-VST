@@ -39,6 +39,8 @@ private:
     float window [kFFTSize]     = {};
     float fftWork[kFFTSize * 2] = {};   // interleaved complex work buffer
 
+    int prevSemitones = 0;
+
     void processHop (Channel& ch, float pitchRatio);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PitchShifter)

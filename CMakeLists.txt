@@ -19,6 +19,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
+FetchContent_Declare(
+    RTNeural
+    GIT_REPOSITORY https://github.com/jatinchowdhury18/RTNeural.git
+    GIT_TAG        main
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
+)
+FetchContent_MakeAvailable(RTNeural)
+
 juce_add_plugin(MFAmp
     VERSION                   1.0.0
     COMPANY_NAME              "GaresonC"
@@ -28,6 +37,7 @@ juce_add_plugin(MFAmp
     IS_MIDI_EFFECT            FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD   TRUE
+    VST3_COPY_DIR             "C:/Program Files/Steinberg/VstPlugins"
     PLUGIN_MANUFACTURER_CODE  Grsc
     PLUGIN_CODE               GAmp
     FORMATS                   VST3 Standalone
@@ -40,7 +50,7 @@ target_sources(MFAmp
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
-        Source/AmpProcessor.cpp
+        Source/NeuralAmpProcessor.cpp
         Source/EQProcessor.cpp
         Source/StageProcessor.cpp
         Source/Tuner.cpp
@@ -61,12 +71,14 @@ target_compile_definitions(MFAmp
 target_include_directories(MFAmp
     PRIVATE
         "${JUCE_ASIO_SUPPORT_PATH}/common"
+        "${rtneural_SOURCE_DIR}/modules/json"
 )
 
 target_link_libraries(MFAmp
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        RTNeural
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

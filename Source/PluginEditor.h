@@ -37,13 +37,17 @@ private:
 
     // Tuner section
     TunerDisplay tunerDisplay;
-    juce::TextButton tunerToggle { "TUNER" };
+    juce::TextButton tunerToggle { "MUTE" };
 
-    // Amp knobs
-    juce::Slider gainSlider, bassSlider, midSlider,
-                 trebleSlider, presenceSlider, masterSlider;
-    juce::Label  gainLabel, bassLabel, midLabel,
-                 trebleLabel, presenceLabel, masterLabel;
+    // Input channel selector
+    juce::ComboBox inputChannelBox;
+    juce::Label    inputChannelLabel;
+
+    // Amp controls
+    juce::Slider     gainSlider, masterSlider;
+    juce::Label      gainLabel, masterLabel;
+    juce::TextButton loadModelBtn { "Browse..." };
+    juce::Label      modelFileLabel;
 
     // Noise gate section
     juce::TextButton gateEnableBtn   { "GATE" };
@@ -61,17 +65,25 @@ private:
     juce::TextButton irOnBtn    { "IR ON" };
     juce::Label      irFileLabel;
 
-    // Pre-amp stage (EQ + compressor)
-    juce::Slider preEqLowSlider, preEqMidSlider, preEqHighSlider,
-                 preCompThreshSlider, preCompRatioSlider;
-    juce::Label  preEqLowLabel, preEqMidLabel, preEqHighLabel,
-                 preCompThreshLabel, preCompRatioLabel;
+    // Pre-amp EQ
+    juce::Slider preEqLowSlider, preEqMidSlider, preEqHighSlider;
+    juce::Label  preEqLowLabel, preEqMidLabel, preEqHighLabel;
 
-    // Post-amp stage (EQ + compressor)
-    juce::Slider postEqLowSlider, postEqMidSlider, postEqHighSlider,
-                 postCompThreshSlider, postCompRatioSlider;
-    juce::Label  postEqLowLabel, postEqMidLabel, postEqHighLabel,
-                 postCompThreshLabel, postCompRatioLabel;
+    // Pre-amp compressor
+    juce::Slider preCompThreshSlider, preCompRatioSlider;
+    juce::Slider preCompAttackSlider, preCompReleaseSlider, preCompMakeupSlider;
+    juce::Label  preCompThreshLabel, preCompRatioLabel;
+    juce::Label  preCompAttackLabel, preCompReleaseLabel, preCompMakeupLabel;
+
+    // Post-amp EQ
+    juce::Slider postEqLowSlider, postEqMidSlider, postEqHighSlider;
+    juce::Label  postEqLowLabel, postEqMidLabel, postEqHighLabel;
+
+    // Post-amp compressor
+    juce::Slider postCompThreshSlider, postCompRatioSlider;
+    juce::Slider postCompAttackSlider, postCompReleaseSlider, postCompMakeupSlider;
+    juce::Label  postCompThreshLabel, postCompRatioLabel;
+    juce::Label  postCompAttackLabel, postCompReleaseLabel, postCompMakeupLabel;
 
     // Post-IR 8-band EQ
     juce::Slider eqSliders[EQProcessor::kNumBands];
@@ -80,28 +92,34 @@ private:
     // APVTS attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
-    std::unique_ptr<SliderAtt> gainAtt, bassAtt, midAtt,
-                                trebleAtt, presenceAtt, masterAtt;
+    std::unique_ptr<ComboAtt>  inputChannelAtt;
+    std::unique_ptr<SliderAtt> gainAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
-    std::unique_ptr<ButtonAtt> irEnabledAtt, tunerEnabledAtt, gateEnabledAtt;
+    std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
     std::unique_ptr<ButtonAtt> pitchEnabledAtt;
     std::unique_ptr<SliderAtt> pitchSemiAtt;
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
 
-    std::unique_ptr<SliderAtt> preEqLowAtt, preEqMidAtt, preEqHighAtt,
-                                preCompThreshAtt, preCompRatioAtt;
-    std::unique_ptr<SliderAtt> postEqLowAtt, postEqMidAtt, postEqHighAtt,
-                                postCompThreshAtt, postCompRatioAtt;
+    std::unique_ptr<SliderAtt> preEqLowAtt, preEqMidAtt, preEqHighAtt;
+    std::unique_ptr<SliderAtt> preCompThreshAtt, preCompRatioAtt;
+    std::unique_ptr<SliderAtt> preCompAttackAtt, preCompReleaseAtt, preCompMakeupAtt;
+    std::unique_ptr<SliderAtt> postEqLowAtt, postEqMidAtt, postEqHighAtt;
+    std::unique_ptr<SliderAtt> postCompThreshAtt, postCompRatioAtt;
+    std::unique_ptr<SliderAtt> postCompAttackAtt, postCompReleaseAtt, postCompMakeupAtt;
 
-    // File chooser must outlive its callback
+    // File choosers must outlive their callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<juce::FileChooser> modelFileChooser;
 
     // Helpers
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
+    void setupCompKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void setupLargeKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void styleButton(juce::TextButton& b, bool isToggle = false);
     void loadIRFile();
+    void loadModelFile();
     void syncIRPresetBox();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarAmpAudioProcessorEditor)

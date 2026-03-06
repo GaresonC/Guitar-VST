@@ -1,6 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
-#include "AmpProcessor.h"
+#include "NeuralAmpProcessor.h"
 #include "StageProcessor.h"
 #include "Tuner.h"
 #include "IRLoader.h"
@@ -44,9 +44,9 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState apvts;
 
-    AmpProcessor                 ampProcessor;
-    StageProcessor               preAmpStage  { 200.f, 700.f,  4500.f, 8.f,  50.f };
-    StageProcessor               postAmpStage { 150.f, 1000.f, 5000.f, 2.f,  80.f };
+    NeuralAmpProcessor           neuralAmp;
+    StageProcessor               preAmpStage  { 200.f, 700.f,  4500.f };
+    StageProcessor               postAmpStage { 150.f, 1000.f, 5000.f };
     Tuner                        tuner;
     IRLoader                     irLoader;
     EQProcessor                  eqProcessor;
