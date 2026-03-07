@@ -142,7 +142,7 @@ void TunerDisplay::paint(juce::Graphics& g)
 GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), tunerDisplay(p)
 {
-    setSize(1900, 420);
+    setSize(1108, 650);
 
     // ---- Tuner display + mute button -----------------------------------------
     addAndMakeVisible(tunerDisplay);
@@ -345,6 +345,22 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
             irFileLabel.setText(audioProcessor.irLoader.getFileName(), juce::dontSendNotification);
             irFileLabel.setColour(juce::Label::textColourId, kText);
             syncIRPresetBox();
+        }
+        else
+        {
+            juce::String bundledName = audioProcessor.apvts.state.getProperty("bundledIRName", "");
+            if (bundledName.isNotEmpty())
+            {
+                juce::String resName = bundledName.replaceCharacter(' ', '_') + "_wav";
+                int irSize = 0;
+                const char* irData = BinaryData::getNamedResource(resName.toRawUTF8(), irSize);
+                if (irData != nullptr && audioProcessor.irLoader.loadIR(irData, irSize, bundledName))
+                {
+                    irFileLabel.setText(bundledName, juce::dontSendNotification);
+                    irFileLabel.setColour(juce::Label::textColourId, kText);
+                    syncIRPresetBox();
+                }
+            }
         }
 
         juce::String ampModelPath = audioProcessor.apvts.state.getProperty("ampModelPath", "");
@@ -593,6 +609,9 @@ void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
                 auto state = audioProcessor.apvts.copyState();
                 state.setProperty("irFilePath",
                     audioProcessor.irLoader.getFilePath(), nullptr);
+                state.setProperty("bundledIRName",
+                    audioProcessor.irLoader.getFilePath().isEmpty()
+                        ? audioProcessor.irLoader.getFileName() : "", nullptr);
                 state.setProperty("ampModelPath",
                     audioProcessor.neuralAmp.getModelFilePath(), nullptr);
 
@@ -718,45 +737,51 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawHorizontalLine(57, 8.0f, (float)W - 8.0f);
 
     // === Signal chain section boxes ===
-    const int boxY = 60;
-    const int boxH = H - boxY - 6;
+    const int row1Y = 60, row1H = 300;
+    const int row2Y = row1Y + row1H + 4;
+    const int row2H = H - row2Y - 6;
     const float cr = 6.0f;
     const int gap = 4, m = 8;
 
-    const int wInput=80, wGate=112, wPreEQ=165, wPreComp=320,
-              wAmp=200, wCab=195, wPostEQ=165, wPostComp=320, wLimiter=130;
-
+    // Row 1 widths + x positions
+    const int wInput=80, wGate=112, wPreEQ=165, wPreComp=320, wAmp=200, wCab=195;
     int cx = m;
-    int xInput    = cx; cx += wInput + gap;
-    int xGate     = cx; cx += wGate + gap;
-    int xPreEQ    = cx; cx += wPreEQ + gap;
-    int xPreComp  = cx; cx += wPreComp + gap;
-    int xAmp      = cx; cx += wAmp + gap;
-    int xCab      = cx; cx += wCab + gap;
+    int xInput   = cx; cx += wInput + gap;
+    int xGate    = cx; cx += wGate + gap;
+    int xPreEQ   = cx; cx += wPreEQ + gap;
+    int xPreComp = cx; cx += wPreComp + gap;
+    int xAmp     = cx; cx += wAmp + gap;
+    int xCab     = cx;
+
+    // Row 2 widths + x positions
+    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    cx = m;
     int xPostEQ   = cx; cx += wPostEQ + gap;
     int xPostComp = cx; cx += wPostComp + gap;
-    int xPostIREQ = cx;
-    int wPostIREQ = W - m - xPostIREQ - wLimiter - gap;
-    cx += wPostIREQ + gap;
+    int xPostIREQ = cx; cx += wMFEQ + gap;
+    int wPostIREQ = wMFEQ;
     int xLimiter  = cx;
+    int wLimiter  = W - m - xLimiter;
 
-    struct SectionStyle { int x, w; juce::Colour border; bool comp; const char* label; };
+    struct SectionStyle { int x, y, w, h; juce::Colour border; bool comp; const char* label; };
     const SectionStyle sections[] = {
-        { xInput,    wInput,    juce::Colour(0xffaa44cc), false, "INPUT"        },
-        { xGate,     wGate,     juce::Colour(0xff2277dd), false, "NOISE GATE"  },
-        { xPreEQ,    wPreEQ,    kAccent,                  false, "PRE EQ"       },
-        { xPreComp,  wPreComp,  kGreen,                   true,  "PRE COMP"     },
-        { xAmp,      wAmp,      kAccent,                  false, "AMP"          },
-        { xCab,      wCab,      kAccent,                  false, "CABINET"      },
-        { xPostEQ,   wPostEQ,   kAccent,                  false, "POST EQ"      },
-        { xPostComp, wPostComp, kGreen,                   true,  "POST COMP"    },
-        { xPostIREQ, wPostIREQ, kAccent,                  false, "POST IR EQ"   },
-        { xLimiter,  wLimiter,  kGreen,                   true,  "LIMITER"      },
+        // Row 1
+        { xInput,    row1Y, wInput,    row1H, juce::Colour(0xffaa44cc), false, "INPUT"      },
+        { xGate,     row1Y, wGate,     row1H, juce::Colour(0xff2277dd), false, "NOISE GATE" },
+        { xPreEQ,    row1Y, wPreEQ,    row1H, kAccent,                  false, "PRE EQ"     },
+        { xPreComp,  row1Y, wPreComp,  row1H, kGreen,                   true,  "PRE COMP"   },
+        { xAmp,      row1Y, wAmp,      row1H, kAccent,                  false, "AMP"        },
+        { xCab,      row1Y, wCab,      row1H, kAccent,                  false, "CABINET"    },
+        // Row 2
+        { xPostEQ,   row2Y, wPostEQ,   row2H, kAccent,                  false, "POST EQ"    },
+        { xPostComp, row2Y, wPostComp, row2H, kGreen,                   true,  "POST COMP"  },
+        { xPostIREQ, row2Y, wPostIREQ, row2H, kAccent,                  false, "MF EQ"      },
+        { xLimiter,  row2Y, wLimiter,  row2H, kGreen,                   true,  "LIMITER"    },
     };
 
     for (const auto& s : sections)
     {
-        juce::Rectangle<float> r((float)s.x, (float)boxY, (float)s.w, (float)boxH);
+        juce::Rectangle<float> r((float)s.x, (float)s.y, (float)s.w, (float)s.h);
         g.setColour(s.comp ? kGreen.withAlpha(0.07f) : kPanel.brighter(0.08f));
         g.fillRoundedRectangle(r, cr);
 
@@ -764,11 +789,11 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         g.drawRoundedRectangle(r.reduced(0.5f), cr, 1.3f);
 
         g.setColour(s.border.withAlpha(0.45f));
-        g.fillRect((float)s.x + cr, (float)boxY, (float)s.w - 2.0f * cr, 2.5f);
+        g.fillRect((float)s.x + cr, (float)s.y, (float)s.w - 2.0f * cr, 2.5f);
 
         g.setColour(s.comp ? kGreen.withAlpha(0.9f) : kSubText.withAlpha(0.8f));
         g.setFont(juce::Font(9.5f, juce::Font::bold));
-        g.drawText(s.label, s.x + 4, boxY + 5, s.w - 8, 13, juce::Justification::centred);
+        g.drawText(s.label, s.x + 4, s.y + 5, s.w - 8, 13, juce::Justification::centred);
     }
 
     // Faint "MF" prefix above the GAIN knob label in the AMP section
@@ -776,7 +801,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         const int gainW = 118;
         g.setColour(kSubText.withAlpha(0.35f));
         g.setFont(juce::Font(8.5f, juce::Font::plain));
-        g.drawText("MF", xAmp + 6, boxY + 19, gainW, 10, juce::Justification::centred);
+        g.drawText("MF", xAmp + 6, row1Y + 19, gainW, 10, juce::Justification::centred);
     }
 }
 
@@ -787,25 +812,29 @@ void GuitarAmpAudioProcessorEditor::resized()
 
     // Section position constants — must match paint()
     const int gap = 4, m = 8;
-    const int wInput=80, wGate=112, wPreEQ=165, wPreComp=320,
-              wAmp=200, wCab=195, wPostEQ=165, wPostComp=320, wLimiter=130;
+    const int row1Y = 60, row1H = 300;
+    const int row2Y = row1Y + row1H + gap;
+    const int row2H = H - row2Y - 6;
 
+    // Row 1 widths + x positions
+    const int wInput=80, wGate=112, wPreEQ=165, wPreComp=320, wAmp=200, wCab=195;
     int cx = m;
-    int xInput    = cx; cx += wInput + gap;
-    int xGate     = cx; cx += wGate + gap;
-    int xPreEQ    = cx; cx += wPreEQ + gap;
-    int xPreComp  = cx; cx += wPreComp + gap;
-    int xAmp      = cx; cx += wAmp + gap;
-    int xCab      = cx; cx += wCab + gap;
+    int xInput   = cx; cx += wInput + gap;
+    int xGate    = cx; cx += wGate + gap;
+    int xPreEQ   = cx; cx += wPreEQ + gap;
+    int xPreComp = cx; cx += wPreComp + gap;
+    int xAmp     = cx; cx += wAmp + gap;
+    int xCab     = cx;
+
+    // Row 2 widths + x positions
+    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    cx = m;
     int xPostEQ   = cx; cx += wPostEQ + gap;
     int xPostComp = cx; cx += wPostComp + gap;
-    int xPostIREQ = cx;
-    int wPostIREQ = W - m - xPostIREQ - wLimiter - gap;
-    cx += wPostIREQ + gap;
+    int xPostIREQ = cx; cx += wMFEQ + gap;
+    int wPostIREQ = wMFEQ;
     int xLimiter  = cx;
-
-    const int boxY = 60;
-    const int boxH = H - boxY - 6;
+    int wLimiter  = W - m - xLimiter;
 
     // === Header ===
     deletePresetBtn.setBounds(W - 44,  12, 36, 26);
@@ -815,26 +844,26 @@ void GuitarAmpAudioProcessorEditor::resized()
     tunerToggle    .setBounds(234, 14, 70, 28);
     tunerDisplay   .setBounds(310,  8, W - 538, 40);
 
-    // === INPUT TRIM ===
+    // === INPUT TRIM (row 1) ===
     {
         const int x = xInput, w = wInput;
-        inputTrimLabel .setBounds(x + 6, boxY + 60,  w - 12, 14);
-        inputTrimSlider.setBounds(x + 6, boxY + 74,  w - 12, 220);
+        inputTrimLabel .setBounds(x + 6, row1Y + 52, w - 12, 14);
+        inputTrimSlider.setBounds(x + 6, row1Y + 66, w - 12, 200);
     }
 
-    // === NOISE GATE ===
+    // === NOISE GATE (row 1) ===
     {
         const int x = xGate, w = wGate;
-        gateEnableBtn  .setBounds(x + (w - 80) / 2, boxY + 28, 80, 24);
-        gateThreshLabel.setBounds(x + 6,             boxY + 72, w - 12, 14);
-        gateThreshSlider.setBounds(x + 6,            boxY + 86, w - 12, 220);
+        gateEnableBtn   .setBounds(x + (w - 80) / 2, row1Y + 40, 80, 24);
+        gateThreshLabel .setBounds(x + 6,             row1Y + 84, w - 12, 14);
+        gateThreshSlider.setBounds(x + 6,             row1Y + 98, w - 12, 180);
     }
 
-    // === PRE EQ (3 knobs + freq sliders) ===
+    // === PRE EQ (row 1) — 3 knobs + freq sliders ===
     {
         const int x    = xPreEQ, w = wPreEQ;
-        const int colW = (w - 10) / 3;   // 51px
-        const int y0   = boxY + 60;
+        const int colW = (w - 10) / 3;
+        const int y0   = row1Y + 76;
         preEqLowLabel       .setBounds(x + 5,          y0,       colW, 14);
         preEqLowSlider      .setBounds(x + 5,          y0 + 14,  colW, 110);
         preEqLowFreqLabel   .setBounds(x + 5,          y0 + 128, colW, 12);
@@ -849,51 +878,54 @@ void GuitarAmpAudioProcessorEditor::resized()
         preEqHighFreqSlider .setBounds(x + 5 + colW*2, y0 + 141, colW, 29);
     }
 
-    // === PRE COMP (6 knobs: Thresh | Ratio | Attack | Release | Makeup | Blend) ===
+    // === PRE COMP (row 1) — 2 rows of 3: Thresh/Ratio/Attack | Release/Makeup/Blend ===
     {
-        const int x = xPreComp, w = wPreComp;
-        const int colW = (w - 10) / 6;   // ~51px
-        const int y0   = boxY + 80;
-        preCompThreshLabel  .setBounds(x + 5,           y0,      colW, 14);
-        preCompThreshSlider .setBounds(x + 5,           y0 + 14, colW, 130);
-        preCompRatioLabel   .setBounds(x + 5 + colW,    y0,      colW, 14);
-        preCompRatioSlider  .setBounds(x + 5 + colW,    y0 + 14, colW, 130);
-        preCompAttackLabel  .setBounds(x + 5 + colW*2,  y0,      colW, 14);
-        preCompAttackSlider .setBounds(x + 5 + colW*2,  y0 + 14, colW, 130);
-        preCompReleaseLabel .setBounds(x + 5 + colW*3,  y0,      colW, 14);
-        preCompReleaseSlider.setBounds(x + 5 + colW*3,  y0 + 14, colW, 130);
-        preCompMakeupLabel  .setBounds(x + 5 + colW*4,  y0,      colW, 14);
-        preCompMakeupSlider .setBounds(x + 5 + colW*4,  y0 + 14, colW, 130);
-        preCompBlendLabel   .setBounds(x + 5 + colW*5,  y0,      colW, 14);
-        preCompBlendSlider  .setBounds(x + 5 + colW*5,  y0 + 14, colW, 130);
+        const int x     = xPreComp, w = wPreComp;
+        const int colW  = (w - 10) / 3;
+        const int knobH = 100;
+        const int rowH  = 14 + knobH + 6;
+        const int y0    = row1Y + 42;
+        preCompThreshLabel  .setBounds(x + 5,          y0,      colW, 14);
+        preCompThreshSlider .setBounds(x + 5,          y0 + 14, colW, knobH);
+        preCompRatioLabel   .setBounds(x + 5 + colW,   y0,      colW, 14);
+        preCompRatioSlider  .setBounds(x + 5 + colW,   y0 + 14, colW, knobH);
+        preCompAttackLabel  .setBounds(x + 5 + colW*2, y0,      colW, 14);
+        preCompAttackSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, knobH);
+        const int y1 = y0 + rowH;
+        preCompReleaseLabel .setBounds(x + 5,          y1,      colW, 14);
+        preCompReleaseSlider.setBounds(x + 5,          y1 + 14, colW, knobH);
+        preCompMakeupLabel  .setBounds(x + 5 + colW,   y1,      colW, 14);
+        preCompMakeupSlider .setBounds(x + 5 + colW,   y1 + 14, colW, knobH);
+        preCompBlendLabel   .setBounds(x + 5 + colW*2, y1,      colW, 14);
+        preCompBlendSlider  .setBounds(x + 5 + colW*2, y1 + 14, colW, knobH);
     }
 
-    // === AMP ===
+    // === AMP (row 1) ===
     {
         const int x     = xAmp;
         const int gainW = 118;
         const int rx    = x + gainW + 10;
         const int rw    = wAmp - gainW - 16;
-        gainLabel .setBounds(x + 6, boxY + 28,  gainW, 14);
-        gainSlider.setBounds(x + 6, boxY + 42,  gainW, 230);
-        masterLabel .setBounds(rx, boxY + 70,  rw, 14);
-        masterSlider.setBounds(rx, boxY + 84,  rw, 130);
+        gainLabel .setBounds(x + 6, row1Y + 37, gainW, 14);
+        gainSlider.setBounds(x + 6, row1Y + 51, gainW, 230);
+        masterLabel .setBounds(rx, row1Y + 87, rw, 14);
+        masterSlider.setBounds(rx, row1Y + 101, rw, 130);
     }
 
-    // === CABINET ===
+    // === CABINET (row 1) ===
     {
         const int x = xCab, w = wCab;
-        irPresetBox.setBounds(x + 6,           boxY + 28, w - 12, 26);
-        loadIRBtn  .setBounds(x + 6,           boxY + 60, w - 16 - 84, 24);
-        irOnBtn    .setBounds(x + w - 6 - 84,  boxY + 60, 84, 24);
-        irFileLabel.setBounds(x + 6,           boxY + 92, w - 12, 60);
+        irPresetBox.setBounds(x + 6,          row1Y + 97,  w - 12, 26);
+        loadIRBtn  .setBounds(x + 6,          row1Y + 129, w - 16 - 84, 24);
+        irOnBtn    .setBounds(x + w - 6 - 84, row1Y + 129, 84, 24);
+        irFileLabel.setBounds(x + 6,          row1Y + 161, w - 12, 60);
     }
 
-    // === POST EQ (3 knobs + freq sliders) ===
+    // === POST EQ (row 2) — 3 knobs + freq sliders ===
     {
         const int x    = xPostEQ, w = wPostEQ;
         const int colW = (w - 10) / 3;
-        const int y0   = boxY + 60;
+        const int y0   = row2Y + 66;
         postEqLowLabel       .setBounds(x + 5,          y0,       colW, 14);
         postEqLowSlider      .setBounds(x + 5,          y0 + 14,  colW, 110);
         postEqLowFreqLabel   .setBounds(x + 5,          y0 + 128, colW, 12);
@@ -908,47 +940,50 @@ void GuitarAmpAudioProcessorEditor::resized()
         postEqHighFreqSlider .setBounds(x + 5 + colW*2, y0 + 141, colW, 29);
     }
 
-    // === POST COMP (6 knobs: Thresh | Ratio | Attack | Release | Makeup | Blend) ===
+    // === POST COMP (row 2) — 2 rows of 3: Thresh/Ratio/Attack | Release/Makeup/Blend ===
     {
-        const int x = xPostComp, w = wPostComp;
-        const int colW = (w - 10) / 6;   // ~51px
-        const int y0   = boxY + 80;
+        const int x     = xPostComp, w = wPostComp;
+        const int colW  = (w - 10) / 3;
+        const int knobH = 100;
+        const int rowH  = 14 + knobH + 6;
+        const int y0    = row2Y + 32;
         postCompThreshLabel  .setBounds(x + 5,          y0,      colW, 14);
-        postCompThreshSlider .setBounds(x + 5,          y0 + 14, colW, 130);
+        postCompThreshSlider .setBounds(x + 5,          y0 + 14, colW, knobH);
         postCompRatioLabel   .setBounds(x + 5 + colW,   y0,      colW, 14);
-        postCompRatioSlider  .setBounds(x + 5 + colW,   y0 + 14, colW, 130);
+        postCompRatioSlider  .setBounds(x + 5 + colW,   y0 + 14, colW, knobH);
         postCompAttackLabel  .setBounds(x + 5 + colW*2, y0,      colW, 14);
-        postCompAttackSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, 130);
-        postCompReleaseLabel .setBounds(x + 5 + colW*3, y0,      colW, 14);
-        postCompReleaseSlider.setBounds(x + 5 + colW*3, y0 + 14, colW, 130);
-        postCompMakeupLabel  .setBounds(x + 5 + colW*4, y0,      colW, 14);
-        postCompMakeupSlider .setBounds(x + 5 + colW*4, y0 + 14, colW, 130);
-        postCompBlendLabel   .setBounds(x + 5 + colW*5, y0,      colW, 14);
-        postCompBlendSlider  .setBounds(x + 5 + colW*5, y0 + 14, colW, 130);
+        postCompAttackSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, knobH);
+        const int y1 = y0 + rowH;
+        postCompReleaseLabel .setBounds(x + 5,          y1,      colW, 14);
+        postCompReleaseSlider.setBounds(x + 5,          y1 + 14, colW, knobH);
+        postCompMakeupLabel  .setBounds(x + 5 + colW,   y1,      colW, 14);
+        postCompMakeupSlider .setBounds(x + 5 + colW,   y1 + 14, colW, knobH);
+        postCompBlendLabel   .setBounds(x + 5 + colW*2, y1,      colW, 14);
+        postCompBlendSlider  .setBounds(x + 5 + colW*2, y1 + 14, colW, knobH);
     }
 
-    // === POST IR EQ (8 vertical sliders) ===
+    // === MF EQ / POST IR EQ (row 2) — 8 vertical sliders ===
     {
-        const int x     = xPostIREQ;
-        const int w     = wPostIREQ;
-        const int bandW = (w - 8) / EQProcessor::kNumBands;
-        const int sliderH = boxH - 50;
+        const int x      = xPostIREQ;
+        const int w      = wPostIREQ;
+        const int bandW  = (w - 8) / EQProcessor::kNumBands;
+        const int sliderH = row2H - 50;
         for (int b = 0; b < EQProcessor::kNumBands; ++b)
         {
             const int bx = x + 4 + b * bandW;
-            eqSliders[b].setBounds(bx, boxY + 20,           bandW, sliderH);
-            eqLabels [b].setBounds(bx, boxY + 20 + sliderH, bandW, 14);
+            eqSliders[b].setBounds(bx, row2Y + 20,            bandW, sliderH);
+            eqLabels [b].setBounds(bx, row2Y + 20 + sliderH,  bandW, 14);
         }
     }
 
-    // === LIMITER ===
+    // === LIMITER (row 2) ===
     {
         const int x = xLimiter, w = wLimiter;
         const int colW = (w - 10) / 2;
-        const int y0   = boxY + 80;
-        limiterThreshLabel  .setBounds(x + 5,         y0,      colW, 14);
-        limiterThreshSlider .setBounds(x + 5,         y0 + 14, colW, 130);
-        limiterReleaseLabel .setBounds(x + 5 + colW,  y0,      colW, 14);
-        limiterReleaseSlider.setBounds(x + 5 + colW,  y0 + 14, colW, 130);
+        const int y0   = row2Y + 77;
+        limiterThreshLabel  .setBounds(x + 5,        y0,      colW, 14);
+        limiterThreshSlider .setBounds(x + 5,        y0 + 14, colW, 130);
+        limiterReleaseLabel .setBounds(x + 5 + colW, y0,      colW, 14);
+        limiterReleaseSlider.setBounds(x + 5 + colW, y0 + 14, colW, 130);
     }
 }
