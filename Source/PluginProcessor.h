@@ -5,7 +5,6 @@
 #include "Tuner.h"
 #include "IRLoader.h"
 #include "EQProcessor.h"
-#include "PitchShifter.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -51,7 +50,7 @@ public:
     IRLoader                     irLoader;
     EQProcessor                  eqProcessor;
     juce::dsp::NoiseGate<float>  noiseGate;
-    PitchShifter                 pitchShifter;
+    juce::dsp::Limiter<float>    limiter;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

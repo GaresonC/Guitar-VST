@@ -35,7 +35,7 @@ void StageProcessor::update(float newLow, float newMid, float newHigh,
                              float newLowHz, float newMidHz, float newHighHz,
                              float newThresh, float newRatio,
                              float newAttackMs, float newReleaseMs,
-                             float newMakeupDb)
+                             float newMakeupDb, float blendPct)
 {
     const bool eqChanged  = (lowGainDb  != newLow  || midGainDb  != newMid  || highGainDb  != newHigh
                            || kLowFreq  != newLowHz || kMidFreq  != newMidHz || kHighFreq  != newHighHz);
@@ -51,6 +51,7 @@ void StageProcessor::update(float newLow, float newMid, float newHigh,
     compThreshDb   = newThresh;
     compRatio      = juce::jmax(1.0f, newRatio);
     compMakeupGain = juce::Decibels::decibelsToGain(newMakeupDb);
+    compBlend      = juce::jlimit(0.0f, 1.0f, blendPct * 0.01f);
 
     if (eqChanged)
         updateFilters();
@@ -118,9 +119,10 @@ void StageProcessor::process(juce::AudioBuffer<float>& buffer)
             x = lowFilter [ch].processSample(x);
             x = midFilter [ch].processSample(x);
             x = highFilter[ch].processSample(x);
+            const float dryPostEQ = x;                // post-EQ signal for blend
             x = applyComp(x, env[ch]);
             x *= compMakeupGain;
-            data[i] = x;
+            data[i] = dryPostEQ * (1.0f - compBlend) + x * compBlend;
         }
     }
 }

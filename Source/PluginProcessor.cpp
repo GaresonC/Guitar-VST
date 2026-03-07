@@ -21,13 +21,40 @@ GuitarAmpAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+    // Value formatter lambdas
+    auto dbFmt    = [](float v, int) { return juce::String(v, 1) + " dB"; };
+    auto dbParse  = [](const juce::String& s) { return s.getFloatValue(); };
+    auto msFmt    = [](float v, int) { return juce::String(juce::roundToInt(v)) + " ms"; };
+    auto msParse  = [](const juce::String& s) { return s.getFloatValue(); };
+    auto ratioFmt = [](float v, int) { return juce::String(juce::roundToInt(v)) + ":1"; };
+    auto ratioParse = [](const juce::String& s) { return s.getFloatValue(); };
+    auto pctFmt   = [](float v, int) { return juce::String(juce::roundToInt(v)) + "%"; };
+    auto pctParse = [](const juce::String& s) { return s.getFloatValue(); };
+    auto hzFmt = [](float v, int) -> juce::String {
+        if (v >= 1000.0f) return juce::String(v / 1000.0f, 1) + " kHz";
+        return juce::String(juce::roundToInt(v)) + " Hz";
+    };
+    auto hzParse = [](const juce::String& s) -> float {
+        if (s.containsIgnoreCase("k")) return s.getFloatValue() * 1000.0f;
+        return s.getFloatValue();
+    };
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"inputTrim", 1}, "Input Trim",
+        juce::NormalisableRange<float>(-20.0f, 20.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"inputGain", 1}, "Input Gain",
-        juce::NormalisableRange<float>(0.0f, 60.0f), 20.0f));
+        juce::NormalisableRange<float>(0.0f, 60.0f), 20.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"masterVolume", 1}, "Master Volume",
-        juce::NormalisableRange<float>(-40.0f, 0.0f), -6.0f));
+        juce::NormalisableRange<float>(-40.0f, 0.0f), -6.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
 
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"irEnabled", 1}, "IR Enabled", true));
@@ -40,84 +67,145 @@ GuitarAmpAudioProcessor::createParameterLayout()
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
-        juce::NormalisableRange<float>(-80.0f, -20.0f), -60.0f));
-
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{"pitchShiftEnabled", 1}, "Pitch Shift Enabled", false));
+        juce::NormalisableRange<float>(-80.0f, -20.0f), -60.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"pitchShiftSemitones", 1}, "Pitch Shift",
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 1.0f), 0.0f));
+        juce::ParameterID{"limiterThreshold", 1}, "Limiter Threshold",
+        juce::NormalisableRange<float>(-20.0f, 0.0f), -0.5f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"limiterRelease", 1}, "Limiter Release",
+        juce::NormalisableRange<float>(1.0f, 500.0f, 0.0f, 0.4f), 100.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        msFmt, msParse));
 
     // Pre-amp stage: 3-band EQ + compressor (shapes signal before distortion)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqLow",  1}, "Pre EQ Low",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqMid",  1}, "Pre EQ Mid",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqHigh", 1}, "Pre EQ High",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqLowFreq",  1}, "Pre EQ Low Freq",
-        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 200.0f));
+        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 200.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqMidFreq",  1}, "Pre EQ Mid Freq",
-        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 700.0f));
+        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 700.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preEqHighFreq", 1}, "Pre EQ High Freq",
-        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 4500.0f));
+        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 4500.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompThresh", 1}, "Pre Comp Thresh",
-        juce::NormalisableRange<float>(-60.0f, 0.0f), -20.0f));
+        juce::NormalisableRange<float>(-60.0f, 0.0f), -20.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompRatio",  1}, "Pre Comp Ratio",
-        juce::NormalisableRange<float>(1.0f, 20.0f), 3.0f));
+        juce::NormalisableRange<float>(1.0f, 20.0f), 3.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        ratioFmt, ratioParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompAttack", 1}, "Pre Comp Attack",
-        juce::NormalisableRange<float>(1.0f, 200.0f), 10.0f));
+        juce::NormalisableRange<float>(1.0f, 200.0f), 10.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        msFmt, msParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompRelease", 1}, "Pre Comp Release",
-        juce::NormalisableRange<float>(10.0f, 2000.0f), 80.0f));
+        juce::NormalisableRange<float>(10.0f, 2000.0f), 80.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        msFmt, msParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"preCompMakeup", 1}, "Pre Comp Makeup",
-        juce::NormalisableRange<float>(0.0f, 20.0f), 0.0f));
+        juce::NormalisableRange<float>(0.0f, 20.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"preCompBlend", 1}, "Pre Comp Blend",
+        juce::NormalisableRange<float>(0.0f, 100.0f), 100.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        pctFmt, pctParse));
 
     // Post-amp stage: 3-band EQ + compressor (shapes and glues after distortion)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqLow",  1}, "Post EQ Low",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqMid",  1}, "Post EQ Mid",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqHigh", 1}, "Post EQ High",
-        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqLowFreq",  1}, "Post EQ Low Freq",
-        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 150.0f));
+        juce::NormalisableRange<float>(60.0f, 600.0f, 0.0f, 0.4f), 150.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqMidFreq",  1}, "Post EQ Mid Freq",
-        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 1000.0f));
+        juce::NormalisableRange<float>(200.0f, 3000.0f, 0.0f, 0.4f), 1000.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postEqHighFreq", 1}, "Post EQ High Freq",
-        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 5000.0f));
+        juce::NormalisableRange<float>(2000.0f, 12000.0f, 0.0f, 0.4f), 5000.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        hzFmt, hzParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompThresh", 1}, "Post Comp Thresh",
-        juce::NormalisableRange<float>(-60.0f, 0.0f), -18.0f));
+        juce::NormalisableRange<float>(-60.0f, 0.0f), -18.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompRatio",  1}, "Post Comp Ratio",
-        juce::NormalisableRange<float>(1.0f, 20.0f), 4.0f));
+        juce::NormalisableRange<float>(1.0f, 20.0f), 4.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        ratioFmt, ratioParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompAttack", 1}, "Post Comp Attack",
-        juce::NormalisableRange<float>(1.0f, 200.0f), 5.0f));
+        juce::NormalisableRange<float>(1.0f, 200.0f), 5.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        msFmt, msParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompRelease", 1}, "Post Comp Release",
-        juce::NormalisableRange<float>(10.0f, 2000.0f), 80.0f));
+        juce::NormalisableRange<float>(10.0f, 2000.0f), 80.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        msFmt, msParse));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"postCompMakeup", 1}, "Post Comp Makeup",
-        juce::NormalisableRange<float>(0.0f, 20.0f), 0.0f));
+        juce::NormalisableRange<float>(0.0f, 20.0f), 0.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        dbFmt, dbParse));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"postCompBlend", 1}, "Post Comp Blend",
+        juce::NormalisableRange<float>(0.0f, 100.0f), 100.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        pctFmt, pctParse));
 
     // 8-band post-IR EQ (±15 dB each band)
     static const char* eqParamIds[EQProcessor::kNumBands] = {
@@ -131,7 +219,9 @@ GuitarAmpAudioProcessor::createParameterLayout()
     for (int b = 0; b < EQProcessor::kNumBands; ++b)
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{eqParamIds[b], 1}, eqParamNames[b],
-            juce::NormalisableRange<float>(-15.0f, 15.0f), 0.0f));
+            juce::NormalisableRange<float>(-15.0f, 15.0f), 0.0f,
+            juce::String{}, juce::AudioProcessorParameter::genericParameter,
+            dbFmt, dbParse));
 
     return { params.begin(), params.end() };
 }
@@ -150,14 +240,20 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     noiseGate.setRelease(150.0f);
     noiseGate.setRatio(10.0f);
 
-    pitchShifter.prepare(sampleRate, samplesPerBlock);
-
     neuralAmp.prepare(sampleRate, samplesPerBlock);
     preAmpStage.prepare(sampleRate, samplesPerBlock);
     postAmpStage.prepare(sampleRate, samplesPerBlock);
     tuner.prepare(sampleRate, samplesPerBlock);
     irLoader.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
     eqProcessor.prepare(sampleRate, samplesPerBlock);
+
+    juce::dsp::ProcessSpec stereoSpec;
+    stereoSpec.sampleRate       = sampleRate;
+    stereoSpec.maximumBlockSize = (juce::uint32)juce::jmax(1, samplesPerBlock);
+    stereoSpec.numChannels      = 2;
+    limiter.prepare(stereoSpec);
+    limiter.setThreshold(apvts.getRawParameterValue("limiterThreshold")->load());
+    limiter.setRelease(apvts.getRawParameterValue("limiterRelease")->load());
 
     // Apply current parameter values on prepare
     neuralAmp.update(
@@ -223,6 +319,13 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
         buffer.clear(ch, 0, buffer.getNumSamples());
 
+    // Input trim — first in chain, scales the incoming signal level
+    {
+        const float trimGain = juce::Decibels::decibelsToGain(
+            apvts.getRawParameterValue("inputTrim")->load());
+        buffer.applyGain(0, 0, buffer.getNumSamples(), trimGain);
+    }
+
     // Tuner always runs on the dry signal before any processing
     tuner.process(buffer);
 
@@ -233,14 +336,6 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         juce::dsp::AudioBlock<float>              block(buffer);
         juce::dsp::ProcessContextReplacing<float> ctx(block);
         noiseGate.process(ctx);
-    }
-
-    // Pitch shifter (after gate, before amp — clean signal)
-    if (apvts.getRawParameterValue("pitchShiftEnabled")->load() > 0.5f)
-    {
-        const int semitones = juce::roundToInt(
-            apvts.getRawParameterValue("pitchShiftSemitones")->load());
-        pitchShifter.process(buffer, semitones);
     }
 
     // Pre-amp stage: EQ + compression before distortion
@@ -255,7 +350,8 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         apvts.getRawParameterValue("preCompRatio")->load(),
         apvts.getRawParameterValue("preCompAttack")->load(),
         apvts.getRawParameterValue("preCompRelease")->load(),
-        apvts.getRawParameterValue("preCompMakeup")->load());
+        apvts.getRawParameterValue("preCompMakeup")->load(),
+        apvts.getRawParameterValue("preCompBlend")->load());
     preAmpStage.process(buffer);
 
     // Neural amp processing
@@ -276,7 +372,8 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         apvts.getRawParameterValue("postCompRatio")->load(),
         apvts.getRawParameterValue("postCompAttack")->load(),
         apvts.getRawParameterValue("postCompRelease")->load(),
-        apvts.getRawParameterValue("postCompMakeup")->load());
+        apvts.getRawParameterValue("postCompMakeup")->load(),
+        apvts.getRawParameterValue("postCompBlend")->load());
     postAmpStage.process(buffer);
 
     // IR / Cabinet convolution
@@ -297,6 +394,15 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         eqGains[b] = apvts.getRawParameterValue(eqParamIds[b])->load();
     eqProcessor.update(eqGains);
     eqProcessor.process(buffer);
+
+    // Limiter — final brick-wall at end of chain
+    limiter.setThreshold(apvts.getRawParameterValue("limiterThreshold")->load());
+    limiter.setRelease(apvts.getRawParameterValue("limiterRelease")->load());
+    {
+        juce::dsp::AudioBlock<float>              block(buffer);
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        limiter.process(ctx);
+    }
 
     // Mute — silence output while keeping tuner active
     if (apvts.getRawParameterValue("muteEnabled")->load() > 0.5f)

@@ -18,11 +18,13 @@ public:
     // compRatio: linear compression ratio (1 = no compression)
     // compAttackMs / compReleaseMs: envelope timing in milliseconds
     // compMakeupDb: makeup gain applied after compression
+    // blendPct: 0–100 % parallel compression blend (0 = dry only, 100 = wet only).
+    // EQ is always applied; blend only affects the compressor path.
     void update(float lowDb, float midDb, float highDb,
                 float lowHz, float midHz, float highHz,
                 float compThreshDb, float compRatio,
                 float compAttackMs, float compReleaseMs,
-                float compMakeupDb);
+                float compMakeupDb, float blendPct);
 
 private:
     static constexpr int kMaxChannels = 2;
@@ -39,6 +41,7 @@ private:
     float compThreshDb   = 0.0f;   // 0 dB default = off (signal never reaches 0 dBFS)
     float compRatio      = 3.0f;
     float compMakeupGain = 1.0f;   // linear makeup gain (cached from dB)
+    float compBlend      = 1.0f;   // 0 = fully dry (post-EQ), 1 = fully compressed
 
     juce::dsp::IIR::Filter<float> lowFilter [kMaxChannels];
     juce::dsp::IIR::Filter<float> midFilter [kMaxChannels];

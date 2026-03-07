@@ -4,6 +4,20 @@
 #include "EQProcessor.h"
 
 //==============================================================================
+// Custom LookAndFeel: flat arc-style rotary knobs (Serum/Vital style).
+// Reads rotarySliderFillColourId from each slider, so orange/green per-section
+// colours are inherited automatically from the existing setColour() calls.
+class GuitarAmpLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawRotarySlider(juce::Graphics& g,
+                          int x, int y, int width, int height,
+                          float sliderPos,
+                          float startAngle, float endAngle,
+                          juce::Slider& slider) override;
+};
+
+//==============================================================================
 // Tuner display — draws note name, cents bar and cents value.
 // Runs its own 15 Hz timer to poll atomic results from the processor.
 class TunerDisplay : public juce::Component,
@@ -33,11 +47,14 @@ public:
     void resized() override;
 
 private:
+    GuitarAmpLookAndFeel ampLookAndFeel; // must be declared before all Slider members
+
     GuitarAmpAudioProcessor& audioProcessor;
 
     // Tuner section
     TunerDisplay tunerDisplay;
     juce::TextButton tunerToggle { "MUTE" };
+    juce::TextButton settingsBtn { "SETTINGS" };
 
     // Amp controls
     juce::Slider     gainSlider, masterSlider;
@@ -49,11 +66,6 @@ private:
     juce::TextButton gateEnableBtn   { "GATE" };
     juce::Slider     gateThreshSlider;
     juce::Label      gateThreshLabel;
-
-    // Pitch shifter section
-    juce::TextButton pitchEnableBtn  { "PITCH" };
-    juce::Slider     pitchSemiSlider;
-    juce::Label      pitchSemiLabel;
 
     // Preset manager
     juce::ComboBox   presetBox;
@@ -74,9 +86,9 @@ private:
 
     // Pre-amp compressor
     juce::Slider preCompThreshSlider, preCompRatioSlider;
-    juce::Slider preCompAttackSlider, preCompReleaseSlider, preCompMakeupSlider;
+    juce::Slider preCompAttackSlider, preCompReleaseSlider, preCompMakeupSlider, preCompBlendSlider;
     juce::Label  preCompThreshLabel, preCompRatioLabel;
-    juce::Label  preCompAttackLabel, preCompReleaseLabel, preCompMakeupLabel;
+    juce::Label  preCompAttackLabel, preCompReleaseLabel, preCompMakeupLabel, preCompBlendLabel;
 
     // Post-amp EQ
     juce::Slider postEqLowSlider, postEqMidSlider, postEqHighSlider;
@@ -86,13 +98,21 @@ private:
 
     // Post-amp compressor
     juce::Slider postCompThreshSlider, postCompRatioSlider;
-    juce::Slider postCompAttackSlider, postCompReleaseSlider, postCompMakeupSlider;
+    juce::Slider postCompAttackSlider, postCompReleaseSlider, postCompMakeupSlider, postCompBlendSlider;
     juce::Label  postCompThreshLabel, postCompRatioLabel;
-    juce::Label  postCompAttackLabel, postCompReleaseLabel, postCompMakeupLabel;
+    juce::Label  postCompAttackLabel, postCompReleaseLabel, postCompMakeupLabel, postCompBlendLabel;
+
+    // Amp input trim
+    juce::Slider inputTrimSlider;
+    juce::Label  inputTrimLabel;
 
     // Post-IR 8-band EQ
     juce::Slider eqSliders[EQProcessor::kNumBands];
     juce::Label  eqLabels [EQProcessor::kNumBands];
+
+    // Limiter section
+    juce::Slider limiterThreshSlider, limiterReleaseSlider;
+    juce::Label  limiterThreshLabel,  limiterReleaseLabel;
 
     // APVTS attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -102,18 +122,18 @@ private:
     std::unique_ptr<SliderAtt> gainAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
-    std::unique_ptr<ButtonAtt> pitchEnabledAtt;
-    std::unique_ptr<SliderAtt> pitchSemiAtt;
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
+    std::unique_ptr<SliderAtt> limiterThreshAtt, limiterReleaseAtt;
 
     std::unique_ptr<SliderAtt> preEqLowAtt, preEqMidAtt, preEqHighAtt;
     std::unique_ptr<SliderAtt> preEqLowFreqAtt, preEqMidFreqAtt, preEqHighFreqAtt;
     std::unique_ptr<SliderAtt> preCompThreshAtt, preCompRatioAtt;
-    std::unique_ptr<SliderAtt> preCompAttackAtt, preCompReleaseAtt, preCompMakeupAtt;
+    std::unique_ptr<SliderAtt> preCompAttackAtt, preCompReleaseAtt, preCompMakeupAtt, preCompBlendAtt;
     std::unique_ptr<SliderAtt> postEqLowAtt, postEqMidAtt, postEqHighAtt;
     std::unique_ptr<SliderAtt> postEqLowFreqAtt, postEqMidFreqAtt, postEqHighFreqAtt;
     std::unique_ptr<SliderAtt> postCompThreshAtt, postCompRatioAtt;
-    std::unique_ptr<SliderAtt> postCompAttackAtt, postCompReleaseAtt, postCompMakeupAtt;
+    std::unique_ptr<SliderAtt> postCompAttackAtt, postCompReleaseAtt, postCompMakeupAtt, postCompBlendAtt;
+    std::unique_ptr<SliderAtt> inputTrimAtt;
 
     // File choosers must outlive their callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -132,6 +152,7 @@ private:
     void styleButton(juce::TextButton& b, bool isToggle = false);
     void loadIRFile();
     void loadModelFile();
+    void showSettingsMenu();
     void syncIRPresetBox();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarAmpAudioProcessorEditor)
