@@ -5,6 +5,7 @@
 #include "Tuner.h"
 #include "IRLoader.h"
 #include "EQProcessor.h"
+#include "KnobRangeSet.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -42,6 +43,7 @@ public:
 
     //==========================================================================
     juce::AudioProcessorValueTreeState apvts;
+    KnobRangeSet                 knobRanges;
 
     NeuralAmpProcessor           neuralAmp;
     StageProcessor               preAmpStage  { 200.f, 700.f,  4500.f };
@@ -50,7 +52,6 @@ public:
     IRLoader                     irLoader;
     EQProcessor                  eqProcessor;
     juce::dsp::NoiseGate<float>  noiseGate;
-    juce::dsp::Limiter<float>    limiter;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

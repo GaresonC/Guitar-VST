@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "EQProcessor.h"
+#include "KnobRangesDialog.h"
 
 //==============================================================================
 // Custom LookAndFeel: flat arc-style rotary knobs (Serum/Vital style).
@@ -10,11 +11,19 @@
 class GuitarAmpLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    GuitarAmpLookAndFeel();
+
     void drawRotarySlider(juce::Graphics& g,
                           int x, int y, int width, int height,
                           float sliderPos,
                           float startAngle, float endAngle,
                           juce::Slider& slider) override;
+
+    juce::Typeface::Ptr getTypefaceForFont(const juce::Font& font) override;
+
+private:
+    juce::Typeface::Ptr regularTypeface;
+    juce::Typeface::Ptr italicTypeface;
 };
 
 //==============================================================================
@@ -45,6 +54,9 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+
+    // Called from processor/dialog when knob ranges change
+    void rebuildAllAttachments();
 
 private:
     GuitarAmpLookAndFeel ampLookAndFeel; // must be declared before all Slider members
@@ -110,9 +122,9 @@ private:
     juce::Slider eqSliders[EQProcessor::kNumBands];
     juce::Label  eqLabels [EQProcessor::kNumBands];
 
-    // Limiter section
-    juce::Slider limiterThreshSlider, limiterReleaseSlider;
-    juce::Label  limiterThreshLabel,  limiterReleaseLabel;
+    // Output volume section
+    juce::Slider outputVolSlider;
+    juce::Label  outputVolLabel;
 
     // APVTS attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -123,7 +135,7 @@ private:
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
-    std::unique_ptr<SliderAtt> limiterThreshAtt, limiterReleaseAtt;
+    std::unique_ptr<SliderAtt> outputVolAtt;
 
     std::unique_ptr<SliderAtt> preEqLowAtt, preEqMidAtt, preEqHighAtt;
     std::unique_ptr<SliderAtt> preEqLowFreqAtt, preEqMidFreqAtt, preEqHighFreqAtt;
@@ -154,6 +166,9 @@ private:
     void loadModelFile();
     void showSettingsMenu();
     void syncIRPresetBox();
+    void applyKnobRange(juce::Slider& s, const juce::String& paramId);
+    void applyAllKnobRanges();
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarAmpAudioProcessorEditor)
 };

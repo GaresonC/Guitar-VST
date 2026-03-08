@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include <BinaryData.h>
+#include <MFAmpFontDataBinaryData.h>
 
 //==============================================================================
 // Colour palette
@@ -58,6 +59,26 @@ void GuitarAmpLookAndFeel::drawRotarySlider(
                cy + innerR * std::sin(lineAngle),
                cx + br     * std::cos(lineAngle),
                cy + br     * std::sin(lineAngle), 2.0f);
+}
+
+//==============================================================================
+GuitarAmpLookAndFeel::GuitarAmpLookAndFeel()
+{
+    regularTypeface = juce::Typeface::createSystemTypefaceFor(
+        MFAmpFonts::InstrumentSerifRegular_ttf,
+        MFAmpFonts::InstrumentSerifRegular_ttfSize);
+    italicTypeface = juce::Typeface::createSystemTypefaceFor(
+        MFAmpFonts::InstrumentSerifItalic_ttf,
+        MFAmpFonts::InstrumentSerifItalic_ttfSize);
+}
+
+juce::Typeface::Ptr GuitarAmpLookAndFeel::getTypefaceForFont(const juce::Font& font)
+{
+    if (font.isItalic() && italicTypeface != nullptr)
+        return italicTypeface;
+    if (regularTypeface != nullptr)
+        return regularTypeface;
+    return LookAndFeel_V4::getTypefaceForFont(font);
 }
 
 //==============================================================================
@@ -142,6 +163,7 @@ void TunerDisplay::paint(juce::Graphics& g)
 GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p), tunerDisplay(p)
 {
+    juce::LookAndFeel::setDefaultLookAndFeel(&ampLookAndFeel);
     setSize(1108, 650);
 
     // ---- Tuner display + mute button -----------------------------------------
@@ -369,6 +391,23 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
             modelFileLabel.setText(audioProcessor.neuralAmp.getModelFileName(), juce::dontSendNotification);
             modelFileLabel.setColour(juce::Label::textColourId, kText);
         }
+
+        // Restore knob ranges if saved with preset
+        auto rt = newState.getChildWithName("KnobRanges");
+        if (rt.isValid())
+        {
+            for (int i = 0; i < rt.getNumChildren(); ++i)
+            {
+                auto e = rt.getChild(i);
+                juce::String id = e.getProperty("id").toString();
+                float mn = (float)e.getProperty("min");
+                float mx = (float)e.getProperty("max");
+                if (audioProcessor.knobRanges.ranges.count(id))
+                    audioProcessor.knobRanges.ranges[id] = { mn, mx,
+                        audioProcessor.knobRanges.ranges[id].skew };
+            }
+            rebuildAllAttachments();
+        }
     };
     addAndMakeVisible(presetBox);
 
@@ -413,15 +452,17 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
             audioProcessor.apvts, kEqParamIds[b], s);
     }
 
-    // ---- Limiter ------------------------------------------------------------
-    setupCompKnob(limiterThreshSlider,  limiterThreshLabel,  "THRESH");
-    setupCompKnob(limiterReleaseSlider, limiterReleaseLabel, "RELEASE");
-    limiterThreshAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "limiterThreshold", limiterThreshSlider);
-    limiterReleaseAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "limiterRelease",   limiterReleaseSlider);
+    // ---- Output volume -------------------------------------------------------
+    setupLargeKnob(outputVolSlider, outputVolLabel, "VOL");
+    outputVolAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "outputVolume", outputVolSlider);
+
+    // Apply custom knob ranges from processor state
+    applyAllKnobRanges();
 }
 
 GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor()
 {
+    juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
     // Clear LookAndFeel refs before ampLookAndFeel member is destroyed
     gainSlider.setLookAndFeel(nullptr);
     masterSlider.setLookAndFeel(nullptr);
@@ -445,8 +486,7 @@ GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor()
     postCompMakeupSlider.setLookAndFeel(nullptr);
     postCompBlendSlider.setLookAndFeel(nullptr);
     inputTrimSlider.setLookAndFeel(nullptr);
-    limiterThreshSlider.setLookAndFeel(nullptr);
-    limiterReleaseSlider.setLookAndFeel(nullptr);
+    outputVolSlider.setLookAndFeel(nullptr);
 }
 
 //==============================================================================
@@ -615,6 +655,17 @@ void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
                 state.setProperty("ampModelPath",
                     audioProcessor.neuralAmp.getModelFilePath(), nullptr);
 
+                juce::ValueTree rangesTree("KnobRanges");
+                for (auto& [id, kr] : audioProcessor.knobRanges.ranges)
+                {
+                    juce::ValueTree e("Range");
+                    e.setProperty("id",  id,     nullptr);
+                    e.setProperty("min", kr.min, nullptr);
+                    e.setProperty("max", kr.max, nullptr);
+                    rangesTree.addChild(e, -1, nullptr);
+                }
+                state.addChild(rangesTree, -1, nullptr);
+
                 auto xml = state.createXml();
                 xml->writeTo(getPresetDirectory().getChildFile(name + ".xml"));
 
@@ -659,12 +710,130 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
     juce::PopupMenu menu;
     menu.addSectionHeader("Amp Model: " + modelName);
     menu.addItem(1, "Load Amp Model...");
+    menu.addSeparator();
+    menu.addItem(2, "Knob Ranges...");
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
         [this](int result)
         {
-            if (result == 1) loadModelFile();
+            if (result == 1)
+            {
+                loadModelFile();
+            }
+            else if (result == 2)
+            {
+                auto* dialog = new KnobRangesDialog(audioProcessor,
+                    [this] { rebuildAllAttachments(); });
+                dialog->setSize(420, 520);
+
+                juce::DialogWindow::LaunchOptions opts;
+                opts.content.setOwned(dialog);
+                opts.dialogTitle                = "Knob Ranges";
+                opts.dialogBackgroundColour     = juce::Colour(0xff141414);
+                opts.escapeKeyTriggersCloseButton = true;
+                opts.useNativeTitleBar          = false;
+                opts.resizable                  = false;
+                opts.launchAsync();
+            }
         });
+}
+
+void GuitarAmpAudioProcessorEditor::applyKnobRange(juce::Slider& s, const juce::String& paramId)
+{
+    const auto& ranges = audioProcessor.knobRanges.ranges;
+    auto it = ranges.find(paramId);
+    if (it == ranges.end()) return;
+
+    const auto& kr = it->second;
+    s.setNormalisableRange(juce::NormalisableRange<double>((double)kr.min, (double)kr.max, 0.0, (double)kr.skew));
+    s.setValue(juce::jlimit(kr.min, kr.max, (float)s.getValue()), juce::dontSendNotification);
+}
+
+void GuitarAmpAudioProcessorEditor::applyAllKnobRanges()
+{
+    applyKnobRange(inputTrimSlider,      "inputTrim");
+    applyKnobRange(gainSlider,           "inputGain");
+    applyKnobRange(outputVolSlider,      "outputVolume");
+    applyKnobRange(gateThreshSlider,     "noiseGateThreshold");
+    applyKnobRange(masterSlider,         "masterVolume");
+    applyKnobRange(preCompThreshSlider,  "preCompThresh");
+    applyKnobRange(preCompRatioSlider,   "preCompRatio");
+    applyKnobRange(preCompAttackSlider,  "preCompAttack");
+    applyKnobRange(preCompReleaseSlider, "preCompRelease");
+    applyKnobRange(preCompMakeupSlider,  "preCompMakeup");
+    applyKnobRange(preCompBlendSlider,   "preCompBlend");
+    applyKnobRange(postCompThreshSlider, "postCompThresh");
+    applyKnobRange(postCompRatioSlider,  "postCompRatio");
+    applyKnobRange(postCompAttackSlider, "postCompAttack");
+    applyKnobRange(postCompReleaseSlider,"postCompRelease");
+    applyKnobRange(postCompMakeupSlider, "postCompMakeup");
+    applyKnobRange(postCompBlendSlider,  "postCompBlend");
+}
+
+void GuitarAmpAudioProcessorEditor::rebuildAllAttachments()
+{
+    // Destroy existing attachments before recreating
+    gainAtt.reset();
+    masterAtt.reset();
+    gateThreshAtt.reset();
+    inputTrimAtt.reset();
+    outputVolAtt.reset();
+    preEqLowAtt.reset();  preEqMidAtt.reset();  preEqHighAtt.reset();
+    preEqLowFreqAtt.reset(); preEqMidFreqAtt.reset(); preEqHighFreqAtt.reset();
+    preCompThreshAtt.reset(); preCompRatioAtt.reset();
+    preCompAttackAtt.reset(); preCompReleaseAtt.reset();
+    preCompMakeupAtt.reset(); preCompBlendAtt.reset();
+    postEqLowAtt.reset(); postEqMidAtt.reset(); postEqHighAtt.reset();
+    postEqLowFreqAtt.reset(); postEqMidFreqAtt.reset(); postEqHighFreqAtt.reset();
+    postCompThreshAtt.reset(); postCompRatioAtt.reset();
+    postCompAttackAtt.reset(); postCompReleaseAtt.reset();
+    postCompMakeupAtt.reset(); postCompBlendAtt.reset();
+    for (auto& a : eqAtts) a.reset();
+
+    // Recreate
+    gainAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "inputGain",    gainSlider);
+    masterAtt    = std::make_unique<SliderAtt>(audioProcessor.apvts, "masterVolume", masterSlider);
+    gateThreshAtt= std::make_unique<SliderAtt>(audioProcessor.apvts, "noiseGateThreshold", gateThreshSlider);
+    inputTrimAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "inputTrim",    inputTrimSlider);
+    outputVolAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "outputVolume", outputVolSlider);
+
+    preEqLowAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqLow",  preEqLowSlider);
+    preEqMidAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqMid",  preEqMidSlider);
+    preEqHighAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqHigh", preEqHighSlider);
+    preEqLowFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqLowFreq",  preEqLowFreqSlider);
+    preEqMidFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqMidFreq",  preEqMidFreqSlider);
+    preEqHighFreqAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preEqHighFreq", preEqHighFreqSlider);
+
+    preCompThreshAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompThresh",   preCompThreshSlider);
+    preCompRatioAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompRatio",    preCompRatioSlider);
+    preCompAttackAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompAttack",   preCompAttackSlider);
+    preCompReleaseAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompRelease",  preCompReleaseSlider);
+    preCompMakeupAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompMakeup",   preCompMakeupSlider);
+    preCompBlendAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompBlend",    preCompBlendSlider);
+
+    postEqLowAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqLow",  postEqLowSlider);
+    postEqMidAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqMid",  postEqMidSlider);
+    postEqHighAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqHigh", postEqHighSlider);
+    postEqLowFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqLowFreq",  postEqLowFreqSlider);
+    postEqMidFreqAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqMidFreq",  postEqMidFreqSlider);
+    postEqHighFreqAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postEqHighFreq", postEqHighFreqSlider);
+
+    postCompThreshAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompThresh",   postCompThreshSlider);
+    postCompRatioAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompRatio",    postCompRatioSlider);
+    postCompAttackAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompAttack",   postCompAttackSlider);
+    postCompReleaseAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompRelease",  postCompReleaseSlider);
+    postCompMakeupAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompMakeup",   postCompMakeupSlider);
+    postCompBlendAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompBlend",    postCompBlendSlider);
+
+    static const char* kEqParamIds[EQProcessor::kNumBands] = {
+        "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
+        "eq5Gain","eq6Gain","eq7Gain","eq8Gain"
+    };
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        eqAtts[b] = std::make_unique<SliderAtt>(audioProcessor.apvts, kEqParamIds[b], eqSliders[b]);
+
+    // Re-apply custom ranges after recreating attachments
+    applyAllKnobRanges();
 }
 
 void GuitarAmpAudioProcessorEditor::loadModelFile()
@@ -776,7 +945,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         { xPostEQ,   row2Y, wPostEQ,   row2H, kAccent,                  false, "POST EQ"    },
         { xPostComp, row2Y, wPostComp, row2H, kGreen,                   true,  "POST COMP"  },
         { xPostIREQ, row2Y, wPostIREQ, row2H, kAccent,                  false, "MF EQ"      },
-        { xLimiter,  row2Y, wLimiter,  row2H, kGreen,                   true,  "LIMITER"    },
+        { xLimiter,  row2Y, wLimiter,  row2H, kAccent,                  false, "OUTPUT"     },
     };
 
     for (const auto& s : sections)
@@ -976,14 +1145,13 @@ void GuitarAmpAudioProcessorEditor::resized()
         }
     }
 
-    // === LIMITER (row 2) ===
+    // === OUTPUT (row 2) — single large VOL knob ===
     {
         const int x = xLimiter, w = wLimiter;
-        const int colW = (w - 10) / 2;
-        const int y0   = row2Y + 77;
-        limiterThreshLabel  .setBounds(x + 5,        y0,      colW, 14);
-        limiterThreshSlider .setBounds(x + 5,        y0 + 14, colW, 130);
-        limiterReleaseLabel .setBounds(x + 5 + colW, y0,      colW, 14);
-        limiterReleaseSlider.setBounds(x + 5 + colW, y0 + 14, colW, 130);
+        const int knobSize = juce::jmin(w - 20, row2H - 44);
+        const int kx = x + (w - knobSize) / 2;
+        const int ky = row2Y + (row2H - knobSize - 18) / 2 + 8;
+        outputVolLabel .setBounds(kx, ky - 18, knobSize, 16);
+        outputVolSlider.setBounds(kx, ky,      knobSize, knobSize);
     }
 }
