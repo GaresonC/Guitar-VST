@@ -1,6 +1,5 @@
 #include "PluginEditor.h"
 #include <BinaryData.h>
-#include <MFAmpFontDataBinaryData.h>
 
 //==============================================================================
 // Colour palette
@@ -59,26 +58,6 @@ void GuitarAmpLookAndFeel::drawRotarySlider(
                cy + innerR * std::sin(lineAngle),
                cx + br     * std::cos(lineAngle),
                cy + br     * std::sin(lineAngle), 2.0f);
-}
-
-//==============================================================================
-GuitarAmpLookAndFeel::GuitarAmpLookAndFeel()
-{
-    regularTypeface = juce::Typeface::createSystemTypefaceFor(
-        MFAmpFonts::InstrumentSerifRegular_ttf,
-        MFAmpFonts::InstrumentSerifRegular_ttfSize);
-    italicTypeface = juce::Typeface::createSystemTypefaceFor(
-        MFAmpFonts::InstrumentSerifItalic_ttf,
-        MFAmpFonts::InstrumentSerifItalic_ttfSize);
-}
-
-juce::Typeface::Ptr GuitarAmpLookAndFeel::getTypefaceForFont(const juce::Font& font)
-{
-    if (font.isItalic() && italicTypeface != nullptr)
-        return italicTypeface;
-    if (regularTypeface != nullptr)
-        return regularTypeface;
-    return LookAndFeel_V4::getTypefaceForFont(font);
 }
 
 //==============================================================================

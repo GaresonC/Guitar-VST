@@ -50,15 +50,6 @@ juce_generate_juce_header(MFAmp)
 file(GLOB IR_FILES "${CMAKE_CURRENT_SOURCE_DIR}/IRs/*.wav")
 juce_add_binary_data(MFAmpIRData SOURCES ${IR_FILES})
 
-# Bundle font files into the binary
-juce_add_binary_data(MFAmpFontData
-    NAMESPACE MFAmpFonts
-    HEADER_NAME MFAmpFontDataBinaryData.h
-    SOURCES
-        Assets/Fonts/InstrumentSerif-Regular.ttf
-        Assets/Fonts/InstrumentSerif-Italic.ttf
-)
-
 target_sources(MFAmp
     PRIVATE
         Source/PluginProcessor.cpp
@@ -94,7 +85,6 @@ target_link_libraries(MFAmp
         juce::juce_dsp
         RTNeural
         MFAmpIRData
-        MFAmpFontData
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

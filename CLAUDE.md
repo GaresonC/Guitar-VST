@@ -92,6 +92,7 @@ Use `-G "Visual Studio 16 2019"` for VS 2019.
 - **IR loading:** Dual-mode — user file (WAV) or bundled binary IRs. Bundled IRs are accessed via the `BinaryData` namespace.
 - **Neural model format:** Supports GuitarML (PyTorch export, detected by `model_data` + `state_dict` keys) and native RTNeural JSON.
 - **UI style:** Dark theme. Background `#141414`, panels `#222222`, accent `#ff6600` (orange), text `#e0e0e0`/`#888888`.
+- **Font:** Uses JUCE default system font. A custom `InstrumentSerif` font was added in `b2d24f7` and reverted — do not re-add it.
 
 ---
 

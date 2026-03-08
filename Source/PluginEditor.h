@@ -11,19 +11,11 @@
 class GuitarAmpLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    GuitarAmpLookAndFeel();
-
     void drawRotarySlider(juce::Graphics& g,
                           int x, int y, int width, int height,
                           float sliderPos,
                           float startAngle, float endAngle,
                           juce::Slider& slider) override;
-
-    juce::Typeface::Ptr getTypefaceForFont(const juce::Font& font) override;
-
-private:
-    juce::Typeface::Ptr regularTypeface;
-    juce::Typeface::Ptr italicTypeface;
 };
 
 //==============================================================================
