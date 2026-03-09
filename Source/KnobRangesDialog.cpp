@@ -28,8 +28,9 @@ static const struct SectionDef
         { "noiseGateThreshold", "Gate Threshold", "dB" },
     }, 1 },
     { "AMP", {
-        { "masterVolume", "Master Volume", "dB" },
-    }, 1 },
+        { "inputGain",    "Gain",          "dB" },
+        { "masterVolume", "Amp Out",       "dB" },
+    }, 2 },
     { "PRE COMP", {
         { "preCompThresh",  "Threshold", "dB" },
         { "preCompRatio",   "Ratio",     ":1" },

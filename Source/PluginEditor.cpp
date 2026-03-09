@@ -229,8 +229,8 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
 
     // ---- Amp knobs + neural model browser -----------------------------------
     setupLargeKnob(gainSlider,   gainLabel,   "GAIN");
-    setupKnob(masterSlider,    masterLabel,    "MASTER");
-    setupKnob(inputTrimSlider, inputTrimLabel, "INPUT TRIM");
+    setupKnob(masterSlider,    masterLabel,    "AMP OUT");
+    setupKnob(inputTrimSlider, inputTrimLabel, "INPUT GAIN");
 
     gainAtt      = std::make_unique<SliderAtt>(audioProcessor.apvts, "inputGain",    gainSlider);
     masterAtt    = std::make_unique<SliderAtt>(audioProcessor.apvts, "masterVolume", masterSlider);
@@ -475,6 +475,7 @@ void GuitarAmpAudioProcessorEditor::setupKnob(juce::Slider& s, juce::Label& l,
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setLookAndFeel(&ampLookAndFeel);
     s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    s.setPopupMenuEnabled(true);
     s.setColour(juce::Slider::rotarySliderFillColourId,    kAccent);
     s.setColour(juce::Slider::rotarySliderOutlineColourId, kPanel.brighter(0.15f));
     s.setColour(juce::Slider::thumbColourId,               kAccent.brighter(0.3f));
@@ -494,6 +495,7 @@ void GuitarAmpAudioProcessorEditor::setupFreqSlider(juce::Slider& s, juce::Label
 {
     s.setSliderStyle(juce::Slider::LinearHorizontal);
     s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 13);
+    s.setPopupMenuEnabled(true);
     s.setColour(juce::Slider::trackColourId,             kAccent.withAlpha(0.6f));
     s.setColour(juce::Slider::thumbColourId,             kAccent);
     s.setColour(juce::Slider::backgroundColourId,        kBg);
@@ -516,6 +518,7 @@ void GuitarAmpAudioProcessorEditor::setupCompKnob(juce::Slider& s, juce::Label& 
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setLookAndFeel(&ampLookAndFeel);
     s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    s.setPopupMenuEnabled(true);
     s.setColour(juce::Slider::rotarySliderFillColourId,    kGreen);
     s.setColour(juce::Slider::rotarySliderOutlineColourId, kGreen.withAlpha(0.25f));
     s.setColour(juce::Slider::thumbColourId,               kGreen.brighter(0.3f));
@@ -537,6 +540,7 @@ void GuitarAmpAudioProcessorEditor::setupLargeKnob(juce::Slider& s, juce::Label&
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     s.setLookAndFeel(&ampLookAndFeel);
     s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    s.setPopupMenuEnabled(true);
     s.setColour(juce::Slider::rotarySliderFillColourId,    kAccent);
     s.setColour(juce::Slider::rotarySliderOutlineColourId, kAccent.withAlpha(0.35f));
     s.setColour(juce::Slider::thumbColourId,               kAccent.brighter(0.4f));

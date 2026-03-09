@@ -26,7 +26,7 @@ GuitarAmpAudioProcessor::createParameterLayout()
     auto dbParse  = [](const juce::String& s) { return s.getFloatValue(); };
     auto msFmt    = [](float v, int) { return juce::String(juce::roundToInt(v)) + " ms"; };
     auto msParse  = [](const juce::String& s) { return s.getFloatValue(); };
-    auto ratioFmt = [](float v, int) { return juce::String(juce::roundToInt(v)) + ":1"; };
+    auto ratioFmt = [](float v, int) { return juce::String(v, 1) + ":1"; };
     auto ratioParse = [](const juce::String& s) { return s.getFloatValue(); };
     auto pctFmt   = [](float v, int) { return juce::String(juce::roundToInt(v)) + "%"; };
     auto pctParse = [](const juce::String& s) { return s.getFloatValue(); };
