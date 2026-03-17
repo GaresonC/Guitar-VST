@@ -17,6 +17,9 @@ public:
     // Returns true on success.
     bool loadModel(const juce::File& jsonFile);
 
+    // Load a model from in-memory JSON data (e.g. BinaryData). Safe to call from any thread.
+    bool loadModel(const char* jsonData, int jsonSize);
+
     bool hasModel() const noexcept { return modelReady.load(); }
 
     juce::String getModelFileName() const { return currentFile.getFileName(); }

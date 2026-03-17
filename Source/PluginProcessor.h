@@ -44,6 +44,7 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState apvts;
     KnobRangeSet                 knobRanges;
+    juce::ValueTree              sectionImagesTree { "SectionImages" };
 
     NeuralAmpProcessor           neuralAmp;
     StageProcessor               preAmpStage  { 200.f, 700.f,  4500.f };

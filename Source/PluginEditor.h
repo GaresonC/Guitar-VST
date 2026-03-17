@@ -50,6 +50,9 @@ public:
     // Called from processor/dialog when knob ranges change
     void rebuildAllAttachments();
 
+    // Called from processor when DAW state is restored
+    void loadSectionImagesFromTree();
+
 private:
     GuitarAmpLookAndFeel ampLookAndFeel; // must be declared before all Slider members
 
@@ -139,15 +142,39 @@ private:
     std::unique_ptr<SliderAtt> postCompAttackAtt, postCompReleaseAtt, postCompMakeupAtt, postCompBlendAtt;
     std::unique_ptr<SliderAtt> inputTrimAtt;
 
+    // Section background images
+    enum SectionId {
+        kInput=0, kGate, kPreEq, kPreComp, kAmp, kCabinet,
+        kPostEq, kPostComp, kMfEq, kOutput,
+        kOverallBg,
+        kNumSections
+    };
+
+    struct SectionImageData {
+        juce::Image image;
+        float offsetX = 0.f;
+        float offsetY = 0.f;
+        float scale   = 1.f;
+    };
+
+    std::array<SectionImageData, kNumSections> sectionImages;
+
     // File choosers must outlive their callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::FileChooser> modelFileChooser;
+    std::unique_ptr<juce::FileChooser> imageFileChooser;
 
     // Helpers
     void refreshPresetList();
     void saveCurrentPreset();
     void deleteCurrentPreset();
     juce::File getPresetDirectory();
+
+    juce::Rectangle<int> getSectionRect(int sectionId) const;
+    void showImageManagementMenu();
+    void loadSectionImage(int sectionId);
+    void centerImageInSection(int sectionId);
+    void saveSectionImagesToTree();
 
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& name);
     void setupFreqSlider(juce::Slider& s, juce::Label& l);

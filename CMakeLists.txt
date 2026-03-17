@@ -50,6 +50,11 @@ juce_generate_juce_header(MFAmp)
 file(GLOB IR_FILES "${CMAKE_CURRENT_SOURCE_DIR}/IRs/*.wav")
 juce_add_binary_data(MFAmpIRData SOURCES ${IR_FILES})
 
+# Bundle the default neural amp model into the binary
+juce_add_binary_data(MFAmpModelData SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Models/6505Plus_Red_DirectOut.json"
+)
+
 target_sources(MFAmp
     PRIVATE
         Source/PluginProcessor.cpp
@@ -59,7 +64,6 @@ target_sources(MFAmp
         Source/StageProcessor.cpp
         Source/Tuner.cpp
         Source/IRLoader.cpp
-        Source/PitchShifter.cpp
         Source/KnobRangesDialog.cpp
 )
 
@@ -85,8 +89,17 @@ target_link_libraries(MFAmp
         juce::juce_dsp
         RTNeural
         MFAmpIRData
+        MFAmpModelData
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
+)
+
+# Also copy VST3 to Common Files after build
+add_custom_command(TARGET MFAmp_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "$<TARGET_FILE_DIR:MFAmp_VST3>/../../MF AMP.vst3"
+        "C:/Program Files/Common Files/VST3/MF AMP.vst3"
+    COMMENT "Installing VST3 to Common Files/VST3..."
 )

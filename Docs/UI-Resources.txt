@@ -1,0 +1,70 @@
+MF AMP - UI Resources & Layout Reference
+==========================================
+
+Window Size: 1108 x 650 pixels
+
+
+SIGNAL CHAIN OVERVIEW
+---------------------
+The plugin UI is arranged in two rows of section boxes. Each section
+corresponds to a stage in the audio signal chain (left to right, top row
+first, then bottom row):
+
+  Row 1: INPUT -> GATE -> PRE EQ -> PRE COMP -> AMP -> CABINET
+  Row 2: POST EQ -> POST COMP -> MF EQ -> OUTPUT
+
+
+SECTION BOX DIMENSIONS
+----------------------
+Each section box can have a custom background image uploaded via the
+SETTINGS > Manage Section Images menu. Images are auto-scaled to fit
+within the box (aspect ratio preserved) and centered.
+
+Row 1 (top) - Y: 60, Height: 300 px
++-------------+-------+--------+------------------------------------------+
+| Section     | Width | Height | Description                              |
++-------------+-------+--------+------------------------------------------+
+| INPUT       |    80 |    300 | Input trim knob                          |
+| GATE        |   112 |    300 | Noise gate toggle & threshold            |
+| PRE EQ      |   165 |    300 | 3-band EQ before the amp (Low/Mid/High)  |
+| PRE COMP    |   320 |    300 | Compressor before the amp                |
+| AMP         |   200 |    300 | Neural amp gain/master, model loader     |
+| CABINET     |   195 |    300 | IR loader, IR preset selector            |
++-------------+-------+--------+------------------------------------------+
+
+Row 2 (bottom) - Y: 364, Height: 280 px
++-------------+-------+--------+------------------------------------------+
+| Section     | Width | Height | Description                              |
++-------------+-------+--------+------------------------------------------+
+| POST EQ     |   165 |    280 | 3-band EQ after the amp                  |
+| POST COMP   |   320 |    280 | Compressor after the amp                 |
+| MF EQ       |   380 |    280 | 8-band parametric EQ (post-IR)           |
+| OUTPUT      |   215 |    280 | Output volume knob                       |
++-------------+-------+--------+------------------------------------------+
+
+Overall Background: 1108 x 650 (full window, behind all sections)
+
+Spacing: 4 px gap between sections, 8 px outer margin.
+
+
+IMAGE UPLOAD NOTES
+------------------
+- Supported formats: PNG, JPG, BMP, GIF (any format JUCE can read)
+- Images are scaled to fit the section while preserving aspect ratio
+- After scaling, images are centered within the section bounds
+- Image paths and offsets are saved with plugin state (DAW recall)
+- Access via: SETTINGS button > Manage Section Images
+- The "Overall BG" option sets an image behind the entire window
+
+
+COLOUR PALETTE
+--------------
+Background:   #141414
+Panel:        #222222
+Accent:       #FF6600 (orange)
+Text:         #E0E0E0
+Subtext:      #888888
+Green:        #00DD55
+Red:          #DD2222
+Button Active: #CC4400
+Button Idle:  #333333

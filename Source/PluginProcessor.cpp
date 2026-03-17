@@ -4,7 +4,6 @@
 
 static const juce::String kDefaultIRDir    = "C:/Users/Gary/Documents/Cab IR/Custom IRs/";
 static const juce::String kDefaultIRFile   = "Impact Studios_IR 1.wav";
-static const juce::String kDefaultAmpModel = "d:/Repos/Guitar-VST/Models/6505Plus_Red_DirectOut.json";
 
 GuitarAmpAudioProcessor::GuitarAmpAudioProcessor()
     : AudioProcessor(BusesProperties()
@@ -248,7 +247,12 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
 
     // Load default amp model if none is currently loaded
     if (!neuralAmp.hasModel())
-        neuralAmp.loadModel(juce::File(kDefaultAmpModel));
+    {
+        int modelSize = 0;
+        const char* modelData = BinaryData::getNamedResource ("6505Plus_Red_DirectOut_json", modelSize);
+        if (modelData && modelSize > 0)
+            neuralAmp.loadModel (modelData, modelSize);
+    }
 
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
 
@@ -413,6 +417,9 @@ void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     }
     state.addChild(rangesTree, -1, nullptr);
 
+    if (sectionImagesTree.isValid() && sectionImagesTree.getNumChildren() > 0)
+        state.addChild(sectionImagesTree.createCopy(), -1, nullptr);
+
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -467,6 +474,15 @@ void GuitarAmpAudioProcessor::setStateInformation(const void* data, int sizeInBy
                     ed->rebuildAllAttachments();
             });
         }
+
+        auto imagesTree = newState.getChildWithName("SectionImages");
+        sectionImagesTree = imagesTree.isValid() ? imagesTree.createCopy()
+                                                 : juce::ValueTree("SectionImages");
+        juce::MessageManager::callAsync([this]
+        {
+            if (auto* ed = dynamic_cast<GuitarAmpAudioProcessorEditor*>(getActiveEditor()))
+                ed->loadSectionImagesFromTree();
+        });
     }
 }
 

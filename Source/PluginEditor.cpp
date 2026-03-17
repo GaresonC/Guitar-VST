@@ -387,6 +387,13 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
             }
             rebuildAllAttachments();
         }
+
+        // Restore section background images
+        auto imagesTree = newState.getChildWithName("SectionImages");
+        audioProcessor.sectionImagesTree = imagesTree.isValid()
+            ? imagesTree.createCopy()
+            : juce::ValueTree("SectionImages");
+        loadSectionImagesFromTree();
     };
     addAndMakeVisible(presetBox);
 
@@ -437,6 +444,9 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
 
     // Apply custom knob ranges from processor state
     applyAllKnobRanges();
+
+    // Load any section images already present in processor state (e.g. DAW project restore)
+    loadSectionImagesFromTree();
 }
 
 GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor()
@@ -649,6 +659,10 @@ void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
                 }
                 state.addChild(rangesTree, -1, nullptr);
 
+                saveSectionImagesToTree();
+                if (audioProcessor.sectionImagesTree.getNumChildren() > 0)
+                    state.addChild(audioProcessor.sectionImagesTree.createCopy(), -1, nullptr);
+
                 auto xml = state.createXml();
                 xml->writeTo(getPresetDirectory().getChildFile(name + ".xml"));
 
@@ -695,6 +709,7 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
     menu.addItem(1, "Load Amp Model...");
     menu.addSeparator();
     menu.addItem(2, "Knob Ranges...");
+    menu.addItem(3, "Section Images...");
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
         [this](int result)
@@ -702,6 +717,10 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
             if (result == 1)
             {
                 loadModelFile();
+            }
+            else if (result == 3)
+            {
+                showImageManagementMenu();
             }
             else if (result == 2)
             {
@@ -873,11 +892,222 @@ void GuitarAmpAudioProcessorEditor::loadIRFile()
 }
 
 //==============================================================================
+// Section background image helpers
+//==============================================================================
+juce::Rectangle<int> GuitarAmpAudioProcessorEditor::getSectionRect(int sectionId) const
+{
+    const int W = getWidth();
+    const int H = getHeight();
+    const int gap = 4, m = 8;
+    const int row1Y = 60, row1H = 300;
+    const int row2Y = row1Y + row1H + gap;
+    const int row2H = H - row2Y - 6;
+
+    const int wInput=80, wGate=112, wPreEQ=165, wPreComp=320, wAmp=200, wCab=195;
+    int cx = m;
+    const int xInput   = cx; cx += wInput + gap;
+    const int xGate    = cx; cx += wGate + gap;
+    const int xPreEQ   = cx; cx += wPreEQ + gap;
+    const int xPreComp = cx; cx += wPreComp + gap;
+    const int xAmp     = cx; cx += wAmp + gap;
+    const int xCab     = cx;
+
+    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    cx = m;
+    const int xPostEQ   = cx; cx += wPostEQ + gap;
+    const int xPostComp = cx; cx += wPostComp + gap;
+    const int xPostIREQ = cx; cx += wMFEQ + gap;
+    const int xLimiter  = cx;
+    const int wLimiter  = W - m - xLimiter;
+
+    switch (sectionId)
+    {
+        case kInput:    return { xInput,    row1Y, wInput,    row1H };
+        case kGate:     return { xGate,     row1Y, wGate,     row1H };
+        case kPreEq:    return { xPreEQ,    row1Y, wPreEQ,    row1H };
+        case kPreComp:  return { xPreComp,  row1Y, wPreComp,  row1H };
+        case kAmp:      return { xAmp,      row1Y, wAmp,      row1H };
+        case kCabinet:  return { xCab,      row1Y, wCab,      row1H };
+        case kPostEq:   return { xPostEQ,   row2Y, wPostEQ,   row2H };
+        case kPostComp: return { xPostComp, row2Y, wPostComp, row2H };
+        case kMfEq:     return { xPostIREQ, row2Y, wMFEQ,     row2H };
+        case kOutput:   return { xLimiter,  row2Y, wLimiter,  row2H };
+        case kOverallBg: return getBounds();
+        default: return {};
+    }
+}
+
+void GuitarAmpAudioProcessorEditor::centerImageInSection(int sectionId)
+{
+    auto& sd = sectionImages[sectionId];
+    if (!sd.image.isValid()) return;
+
+    auto bounds = getSectionRect(sectionId);
+    float scaleX = (float)bounds.getWidth()  / (float)sd.image.getWidth();
+    float scaleY = (float)bounds.getHeight() / (float)sd.image.getHeight();
+    sd.scale   = juce::jmin(scaleX, scaleY);
+    sd.offsetX = ((float)bounds.getWidth()  - sd.image.getWidth()  * sd.scale) * 0.5f;
+    sd.offsetY = ((float)bounds.getHeight() - sd.image.getHeight() * sd.scale) * 0.5f;
+}
+
+void GuitarAmpAudioProcessorEditor::saveSectionImagesToTree()
+{
+    juce::ValueTree tree("SectionImages");
+    for (int i = 0; i < kNumSections; ++i)
+    {
+        auto& sd = sectionImages[i];
+        if (!sd.image.isValid()) continue;
+
+        juce::MemoryOutputStream pngStream;
+        juce::PNGImageFormat pngFmt;
+        pngFmt.writeImageToStream(sd.image, pngStream);
+
+        juce::String b64 = juce::Base64::toBase64(pngStream.getData(), pngStream.getDataSize());
+
+        juce::ValueTree e("Image");
+        e.setProperty("sectionId", i,         nullptr);
+        e.setProperty("offsetX",   sd.offsetX, nullptr);
+        e.setProperty("offsetY",   sd.offsetY, nullptr);
+        e.setProperty("scale",     sd.scale,   nullptr);
+        e.setProperty("data",      b64,        nullptr);
+        tree.addChild(e, -1, nullptr);
+    }
+    audioProcessor.sectionImagesTree = tree;
+}
+
+void GuitarAmpAudioProcessorEditor::loadSectionImagesFromTree()
+{
+    for (auto& sd : sectionImages)
+        sd = SectionImageData{};
+
+    auto& tree = audioProcessor.sectionImagesTree;
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+    {
+        auto e = tree.getChild(i);
+        int id = (int)e.getProperty("sectionId", -1);
+        if (id < 0 || id >= kNumSections) continue;
+
+        juce::String b64 = e.getProperty("data", "").toString();
+        if (b64.isEmpty()) continue;
+
+        juce::MemoryOutputStream decoded;
+        juce::Base64::convertFromBase64(decoded, b64);
+
+        juce::MemoryInputStream pngStream(decoded.getData(), decoded.getDataSize(), false);
+        juce::Image img = juce::ImageFileFormat::loadFrom(pngStream);
+        if (!img.isValid()) continue;
+
+        sectionImages[id].image   = img;
+        sectionImages[id].offsetX = (float)e.getProperty("offsetX", 0.0);
+        sectionImages[id].offsetY = (float)e.getProperty("offsetY", 0.0);
+        sectionImages[id].scale   = (float)e.getProperty("scale",   1.0);
+    }
+    repaint();
+}
+
+void GuitarAmpAudioProcessorEditor::loadSectionImage(int sectionId)
+{
+    imageFileChooser = std::make_unique<juce::FileChooser>(
+        "Select Background Image",
+        juce::File::getSpecialLocation(juce::File::userPicturesDirectory),
+        "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tiff;*.tif");
+
+    imageFileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, sectionId](const juce::FileChooser& fc)
+        {
+            auto result = fc.getResult();
+            if (!result.existsAsFile()) return;
+
+            juce::Image img = juce::ImageFileFormat::loadFrom(result);
+            if (!img.isValid()) return;
+
+            sectionImages[sectionId].image = img;
+            centerImageInSection(sectionId);
+            repaint();
+            saveSectionImagesToTree();
+        });
+}
+
+void GuitarAmpAudioProcessorEditor::showImageManagementMenu()
+{
+    static const char* kNames[] = {
+        "INPUT", "NOISE GATE", "PRE EQ", "PRE COMP", "AMP", "CABINET",
+        "POST EQ", "POST COMP", "MF EQ", "OUTPUT", "BACKGROUND"
+    };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Section Images");
+
+    for (int i = 0; i < kNumSections; ++i)
+    {
+        if (i == kOverallBg)
+            menu.addSeparator();
+
+        juce::PopupMenu sub;
+        sub.addItem(i * 10 + 1, "Load Image...");
+        if (sectionImages[i].image.isValid())
+            sub.addItem(i * 10 + 2, "Remove Image");
+
+        juce::String label(kNames[i]);
+        if (sectionImages[i].image.isValid())
+            label += juce::String::fromUTF8("  \xe2\x9c\x93");
+
+        menu.addSubMenu(label, sub);
+    }
+
+    menu.addSeparator();
+    menu.addItem(9999, "Clear All Images");
+
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
+        [this](int result)
+        {
+            if (result == 9999)
+            {
+                for (auto& sd : sectionImages)
+                    sd = SectionImageData{};
+                repaint();
+                saveSectionImagesToTree();
+                return;
+            }
+
+            if (result > 0)
+            {
+                int sectionId = result / 10;
+                int action    = result % 10;
+
+                if (sectionId >= 0 && sectionId < kNumSections)
+                {
+                    if (action == 1)
+                        loadSectionImage(sectionId);
+                    else if (action == 2)
+                    {
+                        sectionImages[sectionId] = SectionImageData{};
+                        repaint();
+                        saveSectionImagesToTree();
+                    }
+                }
+            }
+        });
+}
+
+//==============================================================================
 void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(kBg);
     const int W = getWidth();
     const int H = getHeight();
+
+    // Overall background image
+    {
+        auto& bg = sectionImages[kOverallBg];
+        if (bg.image.isValid())
+            g.drawImage(bg.image,
+                        bg.offsetX, bg.offsetY,
+                        bg.image.getWidth()  * bg.scale,
+                        bg.image.getHeight() * bg.scale,
+                        0, 0, bg.image.getWidth(), bg.image.getHeight());
+    }
 
     // Title
     g.setColour(kAccent);
@@ -931,11 +1161,24 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         { xLimiter,  row2Y, wLimiter,  row2H, kAccent,                  false, "OUTPUT"     },
     };
 
-    for (const auto& s : sections)
+    for (int si = 0; si < (int)std::size(sections); ++si)
     {
+        const auto& s = sections[si];
         juce::Rectangle<float> r((float)s.x, (float)s.y, (float)s.w, (float)s.h);
-        g.setColour(s.comp ? kGreen.withAlpha(0.07f) : kPanel.brighter(0.08f));
-        g.fillRoundedRectangle(r, cr);
+        // Section background image
+        {
+            auto& imgData = sectionImages[si];
+            if (imgData.image.isValid())
+            {
+                juce::Graphics::ScopedSaveState saved(g);
+                g.reduceClipRegion(r.toNearestInt());
+                g.drawImage(imgData.image,
+                            r.getX() + imgData.offsetX, r.getY() + imgData.offsetY,
+                            imgData.image.getWidth()  * imgData.scale,
+                            imgData.image.getHeight() * imgData.scale,
+                            0, 0, imgData.image.getWidth(), imgData.image.getHeight());
+            }
+        }
 
         g.setColour(s.border.withAlpha(0.65f));
         g.drawRoundedRectangle(r.reduced(0.5f), cr, 1.3f);
@@ -943,7 +1186,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         g.setColour(s.border.withAlpha(0.45f));
         g.fillRect((float)s.x + cr, (float)s.y, (float)s.w - 2.0f * cr, 2.5f);
 
-        g.setColour(s.comp ? kGreen.withAlpha(0.9f) : kSubText.withAlpha(0.8f));
+        g.setColour(s.border.withAlpha(0.9f));
         g.setFont(juce::Font(9.5f, juce::Font::bold));
         g.drawText(s.label, s.x + 4, s.y + 5, s.w - 8, 13, juce::Justification::centred);
     }

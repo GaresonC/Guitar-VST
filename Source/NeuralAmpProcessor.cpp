@@ -1,5 +1,6 @@
 #include "NeuralAmpProcessor.h"
 #include "json.hpp"
+#include <sstream>
 
 //==============================================================================
 // Helpers for GuitarML JSON format loading
@@ -130,6 +131,42 @@ bool NeuralAmpProcessor::loadModel (const juce::File& jsonFile)
         juce::SpinLock::ScopedLockType lock (modelLock);
         model = std::move (newModel);
         currentFile = jsonFile;
+        modelReady.store (true);
+    }
+
+    return true;
+}
+
+bool NeuralAmpProcessor::loadModel (const char* jsonData, int jsonSize)
+{
+    if (!jsonData || jsonSize <= 0)
+        return false;
+
+    nlohmann::json j;
+    try { j = nlohmann::json::parse (jsonData, jsonData + jsonSize); }
+    catch (...) { return false; }
+
+    std::unique_ptr<RTNeural::Model<float>> newModel;
+    try
+    {
+        if (j.contains ("model_data") && j.contains ("state_dict"))
+            newModel = loadGuitarMLModel (j);
+        else
+        {
+            newModel = RTNeural::json_parser::parseJson<float> (j);
+        }
+    }
+    catch (...) { return false; }
+
+    if (!newModel)
+        return false;
+
+    newModel->reset();
+
+    {
+        juce::SpinLock::ScopedLockType lock (modelLock);
+        model = std::move (newModel);
+        currentFile = juce::File();  // no file path — loaded from binary
         modelReady.store (true);
     }
 
