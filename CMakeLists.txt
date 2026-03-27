@@ -66,6 +66,9 @@ target_sources(MFAmp
         Source/IRLoader.cpp
         Source/KnobRangesDialog.cpp
         Source/SectionColoursDialog.cpp
+        Source/CloudSeed/Parameters.cpp
+        Source/CloudSeed/DSP/Biquad.cpp
+        Source/CloudSeed/DSP/RandomBuffer.cpp
 )
 
 target_compile_definitions(MFAmp
@@ -76,12 +79,17 @@ target_compile_definitions(MFAmp
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_MODAL_LOOPS_PERMITTED=1
         JUCE_ASIO=1
+    PRIVATE
+        BUFFER_SIZE=128
+        MAX_STR_SIZE=64
 )
 
 target_include_directories(MFAmp
     PRIVATE
         "${JUCE_ASIO_SUPPORT_PATH}/common"
         "${rtneural_SOURCE_DIR}/modules/json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source/CloudSeed"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source/CloudSeed/DSP"
 )
 
 target_link_libraries(MFAmp

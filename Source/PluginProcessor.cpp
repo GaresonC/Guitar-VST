@@ -77,6 +77,8 @@ GuitarAmpAudioProcessor::createParameterLayout()
         juce::ParameterID{"bypassPostComp", 1}, "Bypass Post Comp", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"bypassMfEq", 1}, "Bypass MF EQ", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassReverb", 1}, "Bypass Reverb", false));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
@@ -247,6 +249,23 @@ GuitarAmpAudioProcessor::createParameterLayout()
             juce::String{}, juce::AudioProcessorParameter::genericParameter,
             hzFmt, hzParse));
 
+    // Reverb parameters (CloudSeed)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbMix", 1}, "Reverb Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f), 30.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        pctFmt, pctParse));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbDecay", 1}, "Reverb Decay",
+        juce::NormalisableRange<float>(0.0f, 100.0f), 50.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        pctFmt, pctParse));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbSize", 1}, "Reverb Size",
+        juce::NormalisableRange<float>(0.0f, 100.0f), 50.0f,
+        juce::String{}, juce::AudioProcessorParameter::genericParameter,
+        pctFmt, pctParse));
+
     return { params.begin(), params.end() };
 }
 
@@ -270,6 +289,50 @@ void GuitarAmpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     tuner.prepare(sampleRate, samplesPerBlock);
     irLoader.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
     eqProcessor.prepare(sampleRate, samplesPerBlock);
+
+    // Initialize CloudSeed reverb
+    reverb = std::make_unique<Cloudseed::ReverbController>((int)sampleRate);
+    // Set sensible defaults for guitar use
+    reverb->SetParameter(Cloudseed::Parameter::InputMix, 0.0);          // no cross-feed (mono-ish input)
+    reverb->SetParameter(Cloudseed::Parameter::TapEnabled, 1.0);        // enable early reflections
+    reverb->SetParameter(Cloudseed::Parameter::TapCount, 0.3);          // moderate tap count
+    reverb->SetParameter(Cloudseed::Parameter::TapDecay, 0.8);          // early decay
+    reverb->SetParameter(Cloudseed::Parameter::TapPredelay, 0.05);      // short predelay
+    reverb->SetParameter(Cloudseed::Parameter::TapLength, 0.3);         // moderate tap spread
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseEnabled, 1.0);
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseCount, 0.5); // 6 stages
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseDelay, 0.3);
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseModAmount, 0.2);
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseModRate, 0.3);
+    reverb->SetParameter(Cloudseed::Parameter::EarlyDiffuseFeedback, 0.6);
+    reverb->SetParameter(Cloudseed::Parameter::LateDiffuseEnabled, 1.0);
+    reverb->SetParameter(Cloudseed::Parameter::LateDiffuseCount, 0.5);
+    reverb->SetParameter(Cloudseed::Parameter::LateLineCount, 0.7);     // 8 lines
+    reverb->SetParameter(Cloudseed::Parameter::LateLineModAmount, 0.15);
+    reverb->SetParameter(Cloudseed::Parameter::LateLineModRate, 0.25);
+    reverb->SetParameter(Cloudseed::Parameter::LateDiffuseModAmount, 0.15);
+    reverb->SetParameter(Cloudseed::Parameter::LateDiffuseModRate, 0.25);
+    reverb->SetParameter(Cloudseed::Parameter::LateDiffuseFeedback, 0.5);
+    reverb->SetParameter(Cloudseed::Parameter::EqLowShelfEnabled, 1.0);
+    reverb->SetParameter(Cloudseed::Parameter::EqHighShelfEnabled, 1.0);
+    reverb->SetParameter(Cloudseed::Parameter::EqLowpassEnabled, 1.0);
+    reverb->SetParameter(Cloudseed::Parameter::EqLowFreq, 0.3);
+    reverb->SetParameter(Cloudseed::Parameter::EqHighFreq, 0.5);
+    reverb->SetParameter(Cloudseed::Parameter::EqCutoff, 0.7);
+    reverb->SetParameter(Cloudseed::Parameter::EqLowGain, 0.4);
+    reverb->SetParameter(Cloudseed::Parameter::EqHighGain, 0.3);
+    reverb->SetParameter(Cloudseed::Parameter::DryOut, 1.0);            // full dry
+    reverb->SetParameter(Cloudseed::Parameter::EarlyOut, 0.7);          // moderate early
+    reverb->SetParameter(Cloudseed::Parameter::LateOut, 0.7);           // moderate late
+    // Apply user params
+    {
+        float mix   = apvts.getRawParameterValue("reverbMix")->load() / 100.0f;
+        float decay = apvts.getRawParameterValue("reverbDecay")->load() / 100.0f;
+        float size  = apvts.getRawParameterValue("reverbSize")->load() / 100.0f;
+        reverb->SetParameter(Cloudseed::Parameter::LateLineDecay, decay);
+        reverb->SetParameter(Cloudseed::Parameter::LateLineSize, size);
+        (void)mix; // mix is applied in processBlock as dry/wet blend
+    }
 
     // Apply current parameter values on prepare
     neuralAmp.update(
@@ -415,6 +478,39 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // Copy processed ch0 to ch1 for stereo output
     if (numOut >= 2)
         buffer.copyFrom(1, 0, buffer, 0, 0, buffer.getNumSamples());
+
+    // Reverb (CloudSeed) — after IR, before MF EQ
+    if (reverb && apvts.getRawParameterValue("bypassReverb")->load() < 0.5f)
+    {
+        float mix   = apvts.getRawParameterValue("reverbMix")->load() / 100.0f;
+        float decay = apvts.getRawParameterValue("reverbDecay")->load() / 100.0f;
+        float size  = apvts.getRawParameterValue("reverbSize")->load() / 100.0f;
+
+        reverb->SetParameter(Cloudseed::Parameter::LateLineDecay, decay);
+        reverb->SetParameter(Cloudseed::Parameter::LateLineSize, size);
+
+        const int numSamples = buffer.getNumSamples();
+        float* chL = buffer.getWritePointer(0);
+        float* chR = (numOut >= 2) ? buffer.getWritePointer(1) : chL;
+
+        // Save dry signal for mix
+        juce::AudioBuffer<float> dryBuf(2, numSamples);
+        dryBuf.copyFrom(0, 0, buffer, 0, 0, numSamples);
+        if (numOut >= 2)
+            dryBuf.copyFrom(1, 0, buffer, 1, 0, numSamples);
+
+        reverb->Process(chL, chR, chL, chR, numSamples);
+
+        // Dry/wet blend
+        const float* dryL = dryBuf.getReadPointer(0);
+        const float* dryR = dryBuf.getReadPointer(numOut >= 2 ? 1 : 0);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            chL[i] = dryL[i] * (1.0f - mix) + chL[i] * mix;
+            if (numOut >= 2)
+                chR[i] = dryR[i] * (1.0f - mix) + chR[i] * mix;
+        }
+    }
 
     // Post-IR 8-band EQ
     static const char* eqGainIds[EQProcessor::kNumBands] = {

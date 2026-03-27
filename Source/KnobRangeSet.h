@@ -62,6 +62,11 @@ struct KnobRangeSet
         ranges["eq7Gain"]             = { -15.0f,  15.0f, 1.0f };
         ranges["eq8Gain"]             = { -15.0f,  15.0f, 1.0f };
 
+        // ---- REVERB ----
+        ranges["reverbMix"]           = {   0.0f, 100.0f, 1.0f };
+        ranges["reverbDecay"]         = {   0.0f, 100.0f, 1.0f };
+        ranges["reverbSize"]          = {   0.0f, 100.0f, 1.0f };
+
         // ---- MF EQ FREQ ----
         ranges["eq1Freq"]             = {  20.0f,   500.0f, 0.3f };
         ranges["eq2Freq"]             = { 100.0f,   800.0f, 0.3f };

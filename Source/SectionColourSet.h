@@ -10,8 +10,8 @@ struct SectionColourSet
 {
     // Indices match SectionId enum in PluginEditor.h:
     // 0=Input, 1=Gate, 2=PreEq, 3=PreComp, 4=Amp, 5=Cabinet,
-    // 6=PostEq, 7=PostComp, 8=MfEq, 9=Output, 10=OverallBg
-    static constexpr int kNumSections = 11;
+    // 6=PostEq, 7=PostComp, 8=Reverb, 9=MfEq, 10=Output, 11=OverallBg
+    static constexpr int kNumSections = 12;
     std::array<juce::Colour, kNumSections> colours;
 
     SectionColourSet() { initDefaults(); }
@@ -29,8 +29,9 @@ struct SectionColourSet
         colours[5]  = accent;                     // CABINET
         colours[6]  = accent;                     // POST EQ
         colours[7]  = green;                      // POST COMP
-        colours[8]  = accent;                     // MF EQ
-        colours[9]  = accent;                     // OUTPUT
-        colours[10] = juce::Colour(0xff141414);  // OVERALL BG
+        colours[8]  = juce::Colour(0xff4488cc);  // REVERB - blue-ish
+        colours[9]  = accent;                     // MF EQ
+        colours[10] = accent;                     // OUTPUT
+        colours[11] = juce::Colour(0xff141414);  // OVERALL BG
     }
 };

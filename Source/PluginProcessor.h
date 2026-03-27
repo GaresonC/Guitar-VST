@@ -7,6 +7,7 @@
 #include "EQProcessor.h"
 #include "KnobRangeSet.h"
 #include "SectionColourSet.h"
+#include "CloudSeed/DSP/ReverbController.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -55,6 +56,7 @@ public:
     IRLoader                     irLoader;
     EQProcessor                  eqProcessor;
     juce::dsp::NoiseGate<float>  noiseGate;
+    std::unique_ptr<Cloudseed::ReverbController> reverb;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

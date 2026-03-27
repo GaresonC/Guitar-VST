@@ -313,6 +313,14 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
                          postCompRatioSlider);
     }
 
+    // ---- Reverb controls -----------------------------------------------------
+    setupKnob(reverbMixSlider,   reverbMixLabel,   "MIX");
+    setupKnob(reverbDecaySlider, reverbDecayLabel,  "DECAY");
+    setupKnob(reverbSizeSlider,  reverbSizeLabel,   "SIZE");
+    reverbMixAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbMix",   reverbMixSlider);
+    reverbDecayAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbDecay", reverbDecaySlider);
+    reverbSizeAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbSize",  reverbSizeSlider);
+
     // ---- Amp knobs + neural model browser -----------------------------------
     setupLargeKnob(gainSlider,   gainLabel,   "GAIN");
     setupKnob(masterSlider,    masterLabel,    "AMP OUT");
@@ -624,6 +632,9 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     setupBypassButton(bypassMfEqBtn);
     bypassMfEqAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassMfEq", bypassMfEqBtn);
 
+    setupBypassButton(bypassReverbBtn);
+    bypassReverbAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassReverb", bypassReverbBtn);
+
     // Apply custom knob ranges from processor state
     applyAllKnobRanges();
 
@@ -661,6 +672,9 @@ GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor()
     postCompBlendSlider.setLookAndFeel(nullptr);
     inputTrimSlider.setLookAndFeel(nullptr);
     outputVolSlider.setLookAndFeel(nullptr);
+    reverbMixSlider.setLookAndFeel(nullptr);
+    reverbDecaySlider.setLookAndFeel(nullptr);
+    reverbSizeSlider.setLookAndFeel(nullptr);
 }
 
 //==============================================================================
@@ -821,6 +835,11 @@ void GuitarAmpAudioProcessorEditor::updateBypassVisuals()
         postCompThreshLabel, postCompRatioLabel, postCompAttackLabel,
         postCompReleaseLabel, postCompMakeupLabel, postCompBlendLabel,
         postCompRatioValueLabel, postCompRatioDivLabel, postCompRatioOneLabel);
+
+    bool reverbBypassed = bypassReverbBtn.getToggleState();
+    setAlpha(reverbBypassed ? 0.2f : 1.0f,
+        reverbMixSlider, reverbDecaySlider, reverbSizeSlider,
+        reverbMixLabel, reverbDecayLabel, reverbSizeLabel);
 
     bool mfEqBypassed = bypassMfEqBtn.getToggleState();
     for (int b = 0; b < EQProcessor::kNumBands; ++b)
@@ -1065,6 +1084,9 @@ void GuitarAmpAudioProcessorEditor::applyAllKnobRanges()
     applyKnobRange(postCompReleaseSlider,"postCompRelease");
     applyKnobRange(postCompMakeupSlider, "postCompMakeup");
     applyKnobRange(postCompBlendSlider,  "postCompBlend");
+    applyKnobRange(reverbMixSlider,     "reverbMix");
+    applyKnobRange(reverbDecaySlider,   "reverbDecay");
+    applyKnobRange(reverbSizeSlider,    "reverbSize");
 
     static const char* kEqIds[] = { "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
                                      "eq5Gain","eq6Gain","eq7Gain","eq8Gain" };
@@ -1189,6 +1211,15 @@ void GuitarAmpAudioProcessorEditor::applySectionColours()
         tintButton(bypassPostCompBtn, c);
     }
 
+    // kReverb
+    {
+        auto c = sc[kReverb];
+        tintKnob(reverbMixSlider,   reverbMixLabel,   c);
+        tintKnob(reverbDecaySlider, reverbDecayLabel,  c);
+        tintKnob(reverbSizeSlider,  reverbSizeLabel,   c);
+        tintButton(bypassReverbBtn, c);
+    }
+
     // kMfEq
     for (int b = 0; b < EQProcessor::kNumBands; ++b)
     {
@@ -1221,6 +1252,7 @@ void GuitarAmpAudioProcessorEditor::rebuildAllAttachments()
     postCompThreshAtt.reset(); postCompRatioAtt.reset();
     postCompAttackAtt.reset(); postCompReleaseAtt.reset();
     postCompMakeupAtt.reset(); postCompBlendAtt.reset();
+    reverbMixAtt.reset(); reverbDecayAtt.reset(); reverbSizeAtt.reset();
     for (auto& a : eqAtts) a.reset();
 
     // Recreate
@@ -1257,6 +1289,10 @@ void GuitarAmpAudioProcessorEditor::rebuildAllAttachments()
     postCompReleaseAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompRelease",  postCompReleaseSlider);
     postCompMakeupAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompMakeup",   postCompMakeupSlider);
     postCompBlendAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompBlend",    postCompBlendSlider);
+
+    reverbMixAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbMix",   reverbMixSlider);
+    reverbDecayAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbDecay", reverbDecaySlider);
+    reverbSizeAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "reverbSize",  reverbSizeSlider);
 
     static const char* kEqParamIds[EQProcessor::kNumBands] = {
         "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
@@ -1357,10 +1393,11 @@ juce::Rectangle<int> GuitarAmpAudioProcessorEditor::getSectionRect(int sectionId
     const int xAmp     = cx; cx += wAmp + gap;
     const int xCab     = cx;
 
-    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    // Row 2: POST COMP | REVERB | MF EQ | OUTPUT
+    const int wPostComp=320, wReverb=165, wMFEQ=380;
     cx = m;
-    const int xPostEQ   = cx; cx += wPostEQ + gap;
     const int xPostComp = cx; cx += wPostComp + gap;
+    const int xReverb   = cx; cx += wReverb + gap;
     const int xPostIREQ = cx; cx += wMFEQ + gap;
     const int xLimiter  = cx;
     const int wLimiter  = W - m - xLimiter;
@@ -1373,8 +1410,9 @@ juce::Rectangle<int> GuitarAmpAudioProcessorEditor::getSectionRect(int sectionId
         case kPreComp:  return { xPreComp,  row1Y, wPreComp,  row1H };
         case kAmp:      return { xAmp,      row1Y, wAmp,      row1H };
         case kCabinet:  return { xCab,      row1Y, wCab,      row1H };
-        case kPostEq:   return { xPostEQ,   row2Y, wPostEQ,   row2H };
+        case kPostEq:   return { xAmp,      row1Y, wAmp,      row1H }; // POST EQ controls live in AMP section now
         case kPostComp: return { xPostComp, row2Y, wPostComp, row2H };
+        case kReverb:   return { xReverb,   row2Y, wReverb,   row2H };
         case kMfEq:     return { xPostIREQ, row2Y, wMFEQ,     row2H };
         case kOutput:   return { xLimiter,  row2Y, wLimiter,  row2H };
         case kOverallBg: return getBounds();
@@ -1506,7 +1544,7 @@ void GuitarAmpAudioProcessorEditor::showImageManagementMenu()
 {
     static const char* kNames[] = {
         "INPUT", "NOISE GATE", "PRE EQ", "PRE COMP", "AMP", "CABINET",
-        "POST EQ", "POST COMP", "MF EQ", "OUTPUT", "BACKGROUND"
+        "POST EQ", "POST COMP", "REVERB", "MF EQ", "OUTPUT", "BACKGROUND"
     };
 
     juce::PopupMenu menu;
@@ -1653,31 +1691,31 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     int xAmp     = cx; cx += wAmp + gap;
     int xCab     = cx;
 
-    // Row 2 widths + x positions
-    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    // Row 2 widths + x positions: POST COMP | REVERB | MF EQ | OUTPUT
+    const int wPostComp=320, wReverb=165, wMFEQ=380;
     cx = m;
-    int xPostEQ   = cx; cx += wPostEQ + gap;
     int xPostComp = cx; cx += wPostComp + gap;
+    int xReverb   = cx; cx += wReverb + gap;
     int xPostIREQ = cx; cx += wMFEQ + gap;
     int wPostIREQ = wMFEQ;
     int xLimiter  = cx;
     int wLimiter  = W - m - xLimiter;
 
-    struct SectionStyle { int x, y, w, h; juce::Colour border; bool comp; const char* label; };
+    struct SectionStyle { int x, y, w, h; juce::Colour border; bool comp; const char* label; int sectionId; };
     const auto& sc = audioProcessor.sectionColours.colours;
     const SectionStyle sections[] = {
         // Row 1
-        { xInput,    row1Y, wInput,    row1H, sc[kInput],    false, "INPUT"      },
-        { xGate,     row1Y, wGate,     row1H, sc[kGate],     false, "NOISE GATE" },
-        { xPreEQ,    row1Y, wPreEQ,    row1H, sc[kPreEq],    false, "PRE EQ"     },
-        { xPreComp,  row1Y, wPreComp,  row1H, sc[kPreComp],  true,  "PRE COMP"   },
-        { xAmp,      row1Y, wAmp,      row1H, sc[kAmp],      false, "AMP"        },
-        { xCab,      row1Y, wCab,      row1H, sc[kCabinet],  false, "CABINET"    },
+        { xInput,    row1Y, wInput,    row1H, sc[kInput],    false, "INPUT",      kInput    },
+        { xGate,     row1Y, wGate,     row1H, sc[kGate],     false, "NOISE GATE", kGate     },
+        { xPreEQ,    row1Y, wPreEQ,    row1H, sc[kPreEq],    false, "PRE EQ",     kPreEq    },
+        { xPreComp,  row1Y, wPreComp,  row1H, sc[kPreComp],  true,  "PRE COMP",   kPreComp  },
+        { xAmp,      row1Y, wAmp,      row1H, sc[kAmp],      false, "AMP",        kAmp      },
+        { xCab,      row1Y, wCab,      row1H, sc[kCabinet],  false, "CABINET",    kCabinet  },
         // Row 2
-        { xPostEQ,   row2Y, wPostEQ,   row2H, sc[kPostEq],   false, "POST EQ"    },
-        { xPostComp, row2Y, wPostComp, row2H, sc[kPostComp], true,  "POST COMP"  },
-        { xPostIREQ, row2Y, wPostIREQ, row2H, sc[kMfEq],     false, "MF EQ"      },
-        { xLimiter,  row2Y, wLimiter,  row2H, sc[kOutput],   false, "OUTPUT"     },
+        { xPostComp, row2Y, wPostComp, row2H, sc[kPostComp], true,  "POST COMP",  kPostComp },
+        { xReverb,   row2Y, wReverb,   row2H, sc[kReverb],   false, "REVERB",     kReverb   },
+        { xPostIREQ, row2Y, wPostIREQ, row2H, sc[kMfEq],     false, "MF EQ",      kMfEq     },
+        { xLimiter,  row2Y, wLimiter,  row2H, sc[kOutput],   false, "OUTPUT",     kOutput   },
     };
 
     for (int si = 0; si < (int)std::size(sections); ++si)
@@ -1686,7 +1724,7 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
         juce::Rectangle<float> r((float)s.x, (float)s.y, (float)s.w, (float)s.h);
         // Section background image
         {
-            auto& imgData = sectionImages[si];
+            auto& imgData = sectionImages[s.sectionId];
             if (imgData.image.isValid())
             {
                 juce::Graphics::ScopedSaveState saved(g);
@@ -1740,11 +1778,11 @@ void GuitarAmpAudioProcessorEditor::resized()
     int xAmp     = cx; cx += wAmp + gap;
     int xCab     = cx;
 
-    // Row 2 widths + x positions
-    const int wPostEQ=165, wPostComp=320, wMFEQ=380;
+    // Row 2 widths + x positions: POST COMP | REVERB | MF EQ | OUTPUT
+    const int wPostComp=320, wReverb=165, wMFEQ=380;
     cx = m;
-    int xPostEQ   = cx; cx += wPostEQ + gap;
     int xPostComp = cx; cx += wPostComp + gap;
+    int xReverb   = cx; cx += wReverb + gap;
     int xPostIREQ = cx; cx += wMFEQ + gap;
     int wPostIREQ = wMFEQ;
     int xLimiter  = cx;
@@ -1821,16 +1859,34 @@ void GuitarAmpAudioProcessorEditor::resized()
         preCompBlendSlider  .setBounds(x + 5 + colW*2, y1 + 14, colW, knobH);
     }
 
-    // === AMP (row 1) ===
+    // === AMP (row 1) — Gain + AMP OUT on top, POST EQ knobs on bottom ===
     {
-        const int x     = xAmp;
-        const int gainW = 118;
-        const int rx    = x + gainW + 10;
-        const int rw    = wAmp - gainW - 16;
-        gainLabel .setBounds(x + 6, row1Y + 37, gainW, 14);
-        gainSlider.setBounds(x + 6, row1Y + 51, gainW, 230);
-        masterLabel .setBounds(rx, row1Y + 87, rw, 14);
-        masterSlider.setBounds(rx, row1Y + 101, rw, 130);
+        const int x = xAmp, w = wAmp;
+        // Top half: GAIN (medium) + AMP OUT side by side
+        const int gainW = 90;
+        const int masterW = w - gainW - 16;
+        const int topH = 140;
+        gainLabel .setBounds(x + 6,            row1Y + 25, gainW,  14);
+        gainSlider.setBounds(x + 6,            row1Y + 39, gainW,  topH);
+        masterLabel .setBounds(x + gainW + 10, row1Y + 25, masterW, 14);
+        masterSlider.setBounds(x + gainW + 10, row1Y + 39, masterW, topH - 20);
+
+        // Bottom half: 3 POST EQ knobs + freq sliders
+        const int eqY0 = row1Y + 39 + topH + 4;
+        const int colW = (w - 10) / 3;
+        const int knobH = 65;
+        postEqLowLabel       .setBounds(x + 5,          eqY0,            colW, 12);
+        postEqLowSlider      .setBounds(x + 5,          eqY0 + 12,      colW, knobH);
+        postEqLowFreqLabel   .setBounds(x + 5,          eqY0 + 12 + knobH, colW, 10);
+        postEqLowFreqSlider  .setBounds(x + 5,          eqY0 + 22 + knobH, colW, 22);
+        postEqMidLabel       .setBounds(x + 5 + colW,   eqY0,            colW, 12);
+        postEqMidSlider      .setBounds(x + 5 + colW,   eqY0 + 12,      colW, knobH);
+        postEqMidFreqLabel   .setBounds(x + 5 + colW,   eqY0 + 12 + knobH, colW, 10);
+        postEqMidFreqSlider  .setBounds(x + 5 + colW,   eqY0 + 22 + knobH, colW, 22);
+        postEqHighLabel      .setBounds(x + 5 + colW*2, eqY0,            colW, 12);
+        postEqHighSlider     .setBounds(x + 5 + colW*2, eqY0 + 12,      colW, knobH);
+        postEqHighFreqLabel  .setBounds(x + 5 + colW*2, eqY0 + 12 + knobH, colW, 10);
+        postEqHighFreqSlider .setBounds(x + 5 + colW*2, eqY0 + 22 + knobH, colW, 22);
     }
 
     // === CABINET (row 1) ===
@@ -1841,23 +1897,17 @@ void GuitarAmpAudioProcessorEditor::resized()
         irFileLabel.setBounds(x + 6,          row1Y + 161, w - 12, 60);
     }
 
-    // === POST EQ (row 2) — 3 knobs + freq sliders ===
+    // === REVERB (row 2) — 3 knobs: Mix, Decay, Size ===
     {
-        const int x    = xPostEQ, w = wPostEQ;
+        const int x    = xReverb, w = wReverb;
         const int colW = (w - 10) / 3;
         const int y0   = row2Y + 66;
-        postEqLowLabel       .setBounds(x + 5,          y0,       colW, 14);
-        postEqLowSlider      .setBounds(x + 5,          y0 + 14,  colW, 110);
-        postEqLowFreqLabel   .setBounds(x + 5,          y0 + 128, colW, 12);
-        postEqLowFreqSlider  .setBounds(x + 5,          y0 + 141, colW, 29);
-        postEqMidLabel       .setBounds(x + 5 + colW,   y0,       colW, 14);
-        postEqMidSlider      .setBounds(x + 5 + colW,   y0 + 14,  colW, 110);
-        postEqMidFreqLabel   .setBounds(x + 5 + colW,   y0 + 128, colW, 12);
-        postEqMidFreqSlider  .setBounds(x + 5 + colW,   y0 + 141, colW, 29);
-        postEqHighLabel      .setBounds(x + 5 + colW*2, y0,       colW, 14);
-        postEqHighSlider     .setBounds(x + 5 + colW*2, y0 + 14,  colW, 110);
-        postEqHighFreqLabel  .setBounds(x + 5 + colW*2, y0 + 128, colW, 12);
-        postEqHighFreqSlider .setBounds(x + 5 + colW*2, y0 + 141, colW, 29);
+        reverbMixLabel  .setBounds(x + 5,          y0,       colW, 14);
+        reverbMixSlider .setBounds(x + 5,          y0 + 14,  colW, 110);
+        reverbDecayLabel .setBounds(x + 5 + colW,  y0,       colW, 14);
+        reverbDecaySlider.setBounds(x + 5 + colW,  y0 + 14,  colW, 110);
+        reverbSizeLabel  .setBounds(x + 5 + colW*2, y0,      colW, 14);
+        reverbSizeSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, 110);
     }
 
     // === POST COMP (row 2) — 2 rows of 3: Thresh/Ratio/Attack | Release/Makeup/Blend ===
@@ -1929,8 +1979,10 @@ void GuitarAmpAudioProcessorEditor::resized()
         placeBypass(bypassPreCompBtn,  xPreComp,  row1Y, wPreComp,  row1H);
         placeBypass(bypassAmpBtn,      xAmp,      row1Y, wAmp,      row1H);
         placeBypass(bypassCabinetBtn,  xCab,      row1Y, wCab,      row1H);
-        placeBypass(bypassPostEqBtn,   xPostEQ,   row2Y, wPostEQ,   row2H);
+        // POST EQ bypass — placed to the right of AMP bypass at bottom of AMP section
+        bypassPostEqBtn.setBounds(xAmp + (wAmp - bw) / 2 + bw + 4, row1Y + row1H - bh - 4, bw, bh);
         placeBypass(bypassPostCompBtn, xPostComp, row2Y, wPostComp, row2H);
+        placeBypass(bypassReverbBtn,   xReverb,   row2Y, wReverb,   row2H);
         placeBypass(bypassMfEqBtn,     xPostIREQ, row2Y, wPostIREQ, row2H);
     }
 

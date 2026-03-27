@@ -15,12 +15,13 @@ static const char* kSectionNames[] = {
     "Cabinet",
     "Post EQ",
     "Post Comp",
+    "Reverb",
     "MF EQ",
     "Output",
     "Overall Background",
 };
 
-static constexpr int kNumDisplaySections = 11; // matches SectionColourSet::kNumSections
+static constexpr int kNumDisplaySections = 12; // matches SectionColourSet::kNumSections
 
 //==============================================================================
 SectionColoursDialog::SectionColoursDialog(GuitarAmpAudioProcessor& proc,
