@@ -6,6 +6,7 @@
 #include "IRLoader.h"
 #include "EQProcessor.h"
 #include "KnobRangeSet.h"
+#include "SectionColourSet.h"
 
 class GuitarAmpAudioProcessor : public juce::AudioProcessor
 {
@@ -44,6 +45,7 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState apvts;
     KnobRangeSet                 knobRanges;
+    SectionColourSet             sectionColours;
     juce::ValueTree              sectionImagesTree { "SectionImages" };
 
     NeuralAmpProcessor           neuralAmp;

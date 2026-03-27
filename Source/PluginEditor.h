@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "EQProcessor.h"
 #include "KnobRangesDialog.h"
+#include "SectionColoursDialog.h"
 
 //==============================================================================
 // Custom LookAndFeel: flat arc-style rotary knobs (Serum/Vital style).
@@ -30,6 +31,8 @@ public:
 
     void paint(juce::Graphics& g) override;
 
+    juce::Image needleImage;
+
 private:
     void timerCallback() override;
 
@@ -53,6 +56,9 @@ public:
     // Called from processor when DAW state is restored
     void loadSectionImagesFromTree();
 
+    // Apply section colours to all controls (knobs, sliders, labels, buttons, combos)
+    void applySectionColours();
+
 private:
     GuitarAmpLookAndFeel ampLookAndFeel; // must be declared before all Slider members
 
@@ -70,7 +76,6 @@ private:
     juce::Label      modelFileLabel;
 
     // Noise gate section
-    juce::TextButton gateEnableBtn   { "GATE" };
     juce::Slider     gateThreshSlider;
     juce::Label      gateThreshLabel;
 
@@ -82,7 +87,6 @@ private:
     // IR loader section
     juce::ComboBox   irPresetBox;
     juce::TextButton loadIRBtn  { "Browse..." };
-    juce::TextButton irOnBtn    { "IR ON" };
     juce::Label      irFileLabel;
 
     // Pre-amp EQ
@@ -96,6 +100,7 @@ private:
     juce::Slider preCompAttackSlider, preCompReleaseSlider, preCompMakeupSlider, preCompBlendSlider;
     juce::Label  preCompThreshLabel, preCompRatioLabel;
     juce::Label  preCompAttackLabel, preCompReleaseLabel, preCompMakeupLabel, preCompBlendLabel;
+    juce::Label  preCompRatioValueLabel, preCompRatioDivLabel, preCompRatioOneLabel;
 
     // Post-amp EQ
     juce::Slider postEqLowSlider, postEqMidSlider, postEqHighSlider;
@@ -108,6 +113,7 @@ private:
     juce::Slider postCompAttackSlider, postCompReleaseSlider, postCompMakeupSlider, postCompBlendSlider;
     juce::Label  postCompThreshLabel, postCompRatioLabel;
     juce::Label  postCompAttackLabel, postCompReleaseLabel, postCompMakeupLabel, postCompBlendLabel;
+    juce::Label  postCompRatioValueLabel, postCompRatioDivLabel, postCompRatioOneLabel;
 
     // Amp input trim
     juce::Slider inputTrimSlider;
@@ -115,11 +121,16 @@ private:
 
     // Post-IR 8-band EQ
     juce::Slider eqSliders[EQProcessor::kNumBands];
-    juce::Label  eqLabels [EQProcessor::kNumBands];
+    juce::Label  eqLabels [EQProcessor::kNumBands];       // frequency labels (bottom)
+    juce::Label  eqGainValueLabels[EQProcessor::kNumBands]; // gain value labels (top)
 
     // Output volume section
     juce::Slider outputVolSlider;
     juce::Label  outputVolLabel;
+
+    // Section bypass buttons
+    juce::TextButton bypassGateBtn, bypassPreEqBtn, bypassPreCompBtn, bypassAmpBtn;
+    juce::TextButton bypassCabinetBtn, bypassPostEqBtn, bypassPostCompBtn, bypassMfEqBtn;
 
     // APVTS attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -129,6 +140,8 @@ private:
     std::unique_ptr<SliderAtt> gainAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
+    std::unique_ptr<ButtonAtt> bypassPreEqAtt, bypassPreCompAtt, bypassAmpAtt;
+    std::unique_ptr<ButtonAtt> bypassPostEqAtt, bypassPostCompAtt, bypassMfEqAtt;
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];
     std::unique_ptr<SliderAtt> outputVolAtt;
 
@@ -187,6 +200,8 @@ private:
     void syncIRPresetBox();
     void applyKnobRange(juce::Slider& s, const juce::String& paramId);
     void applyAllKnobRanges();
+    void setupBypassButton(juce::TextButton& btn);
+    void updateBypassVisuals();
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GuitarAmpAudioProcessorEditor)

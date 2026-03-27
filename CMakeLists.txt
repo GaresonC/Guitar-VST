@@ -65,6 +65,7 @@ target_sources(MFAmp
         Source/Tuner.cpp
         Source/IRLoader.cpp
         Source/KnobRangesDialog.cpp
+        Source/SectionColoursDialog.cpp
 )
 
 target_compile_definitions(MFAmp
@@ -99,7 +100,7 @@ target_link_libraries(MFAmp
 # Also copy VST3 to Common Files after build
 add_custom_command(TARGET MFAmp_VST3 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "$<TARGET_FILE_DIR:MFAmp_VST3>/../../MF AMP.vst3"
+        "${CMAKE_CURRENT_BINARY_DIR}/MFAmp_artefacts/$<CONFIG>/VST3/MF AMP.vst3"
         "C:/Program Files/Common Files/VST3/MF AMP.vst3"
     COMMENT "Installing VST3 to Common Files/VST3..."
 )

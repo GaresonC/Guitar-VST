@@ -89,9 +89,6 @@ void TunerDisplay::paint(juce::Graphics& g)
 
     if (!current.hasSignal)
     {
-        g.setColour(kSubText);
-        g.setFont(juce::Font(14.0f, juce::Font::italic));
-        g.drawText("-- no signal --", b, juce::Justification::centred);
         return;
     }
 
@@ -131,11 +128,23 @@ void TunerDisplay::paint(juce::Graphics& g)
     g.setColour(kText.withAlpha(0.25f));
     g.fillRect(mid - 1.0f, by - 4.0f, 2.0f, bh + 8.0f);
 
-    // Indicator dot
+    // Indicator dot / needle image
     const float norm = juce::jlimit(-50.0f, 50.0f, cents) / 50.0f;
     const float ix   = mid + norm * bw * 0.45f;
-    g.setColour(ind);
-    g.fillEllipse(ix - 6.0f, by - 2.0f, 12.0f, bh + 4.0f);
+    if (needleImage.isValid())
+    {
+        const float imgH = bh + 16.0f;
+        const float scale = imgH / (float)needleImage.getHeight();
+        const float imgW  = needleImage.getWidth() * scale;
+        g.drawImage(needleImage,
+                    ix - imgW * 0.5f, by - imgH * 0.5f + bh * 0.5f, imgW, imgH,
+                    0, 0, needleImage.getWidth(), needleImage.getHeight());
+    }
+    else
+    {
+        g.setColour(ind);
+        g.fillEllipse(ix - 6.0f, by - 2.0f, 12.0f, bh + 4.0f);
+    }
 }
 
 //==============================================================================
@@ -157,11 +166,6 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     muteEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "muteEnabled", tunerToggle);
 
     // ---- Noise gate ----------------------------------------------------------
-    gateEnableBtn.setClickingTogglesState(true);
-    styleButton(gateEnableBtn, true);
-    addAndMakeVisible(gateEnableBtn);
-    gateEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "noiseGateEnabled", gateEnableBtn);
-
     setupLargeKnob(gateThreshSlider, gateThreshLabel, "THRESHOLD");
     gateThreshAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "noiseGateThreshold", gateThreshSlider);
 
@@ -185,6 +189,7 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     // ---- Pre-amp compressor -------------------------------------------------
     setupCompKnob(preCompThreshSlider,  preCompThreshLabel,  "THRESH");
     setupCompKnob(preCompRatioSlider,   preCompRatioLabel,   "RATIO");
+    preCompRatioSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     setupCompKnob(preCompAttackSlider,  preCompAttackLabel,  "ATTACK");
     setupCompKnob(preCompReleaseSlider, preCompReleaseLabel, "RELEASE");
     setupCompKnob(preCompMakeupSlider,  preCompMakeupLabel,  "MAKEUP");
@@ -195,6 +200,46 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     preCompReleaseAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompRelease",  preCompReleaseSlider);
     preCompMakeupAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompMakeup",   preCompMakeupSlider);
     preCompBlendAtt    = std::make_unique<SliderAtt>(audioProcessor.apvts, "preCompBlend",    preCompBlendSlider);
+
+    // Pre-comp ratio split labels
+    {
+        auto setupRatioLabels = [this](juce::Label& valLbl, juce::Label& divLbl, juce::Label& oneLbl,
+                                        juce::Slider& slider)
+        {
+            valLbl.setText(juce::String(slider.getValue(), 1), juce::dontSendNotification);
+            valLbl.setFont(juce::Font(11.0f));
+            valLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            valLbl.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+            valLbl.setJustificationType(juce::Justification::centredRight);
+            valLbl.setEditable(true, true, false);
+            valLbl.onEditorShow = [&valLbl] {
+                if (auto* ed = valLbl.getCurrentTextEditor())
+                    ed->setInputRestrictions(6, "0123456789.");
+            };
+            valLbl.onTextChange = [&valLbl, &slider] {
+                slider.setValue(valLbl.getText().getFloatValue(), juce::sendNotification);
+            };
+            addAndMakeVisible(valLbl);
+
+            divLbl.setText("/", juce::dontSendNotification);
+            divLbl.setFont(juce::Font(11.0f));
+            divLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            divLbl.setJustificationType(juce::Justification::centred);
+            addAndMakeVisible(divLbl);
+
+            oneLbl.setText("1", juce::dontSendNotification);
+            oneLbl.setFont(juce::Font(11.0f));
+            oneLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            oneLbl.setJustificationType(juce::Justification::centredLeft);
+            addAndMakeVisible(oneLbl);
+
+            slider.onValueChange = [&valLbl, &slider] {
+                valLbl.setText(juce::String(slider.getValue(), 1), juce::dontSendNotification);
+            };
+        };
+        setupRatioLabels(preCompRatioValueLabel, preCompRatioDivLabel, preCompRatioOneLabel,
+                         preCompRatioSlider);
+    }
 
     // ---- Post-amp EQ ---------------------------------------------------------
     setupKnob(postEqLowSlider,  postEqLowLabel,  "LOW");
@@ -216,6 +261,7 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     // ---- Post-amp compressor ------------------------------------------------
     setupCompKnob(postCompThreshSlider,  postCompThreshLabel,  "THRESH");
     setupCompKnob(postCompRatioSlider,   postCompRatioLabel,   "RATIO");
+    postCompRatioSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     setupCompKnob(postCompAttackSlider,  postCompAttackLabel,  "ATTACK");
     setupCompKnob(postCompReleaseSlider, postCompReleaseLabel, "RELEASE");
     setupCompKnob(postCompMakeupSlider,  postCompMakeupLabel,  "MAKEUP");
@@ -226,6 +272,46 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     postCompReleaseAtt  = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompRelease",  postCompReleaseSlider);
     postCompMakeupAtt   = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompMakeup",   postCompMakeupSlider);
     postCompBlendAtt    = std::make_unique<SliderAtt>(audioProcessor.apvts, "postCompBlend",    postCompBlendSlider);
+
+    // Post-comp ratio split labels
+    {
+        auto setupRatioLabels = [this](juce::Label& valLbl, juce::Label& divLbl, juce::Label& oneLbl,
+                                        juce::Slider& slider)
+        {
+            valLbl.setText(juce::String(slider.getValue(), 1), juce::dontSendNotification);
+            valLbl.setFont(juce::Font(11.0f));
+            valLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            valLbl.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+            valLbl.setJustificationType(juce::Justification::centredRight);
+            valLbl.setEditable(true, true, false);
+            valLbl.onEditorShow = [&valLbl] {
+                if (auto* ed = valLbl.getCurrentTextEditor())
+                    ed->setInputRestrictions(6, "0123456789.");
+            };
+            valLbl.onTextChange = [&valLbl, &slider] {
+                slider.setValue(valLbl.getText().getFloatValue(), juce::sendNotification);
+            };
+            addAndMakeVisible(valLbl);
+
+            divLbl.setText("/", juce::dontSendNotification);
+            divLbl.setFont(juce::Font(11.0f));
+            divLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            divLbl.setJustificationType(juce::Justification::centred);
+            addAndMakeVisible(divLbl);
+
+            oneLbl.setText("1", juce::dontSendNotification);
+            oneLbl.setFont(juce::Font(11.0f));
+            oneLbl.setColour(juce::Label::textColourId, kGreen.withAlpha(0.85f));
+            oneLbl.setJustificationType(juce::Justification::centredLeft);
+            addAndMakeVisible(oneLbl);
+
+            slider.onValueChange = [&valLbl, &slider] {
+                valLbl.setText(juce::String(slider.getValue(), 1), juce::dontSendNotification);
+            };
+        };
+        setupRatioLabels(postCompRatioValueLabel, postCompRatioDivLabel, postCompRatioOneLabel,
+                         postCompRatioSlider);
+    }
 
     // ---- Amp knobs + neural model browser -----------------------------------
     setupLargeKnob(gainSlider,   gainLabel,   "GAIN");
@@ -296,12 +382,6 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     styleButton(loadIRBtn, false);
     loadIRBtn.onClick = [this] { loadIRFile(); };
     addAndMakeVisible(loadIRBtn);
-
-    // IR ON toggle
-    irOnBtn.setClickingTogglesState(true);
-    styleButton(irOnBtn, true);
-    addAndMakeVisible(irOnBtn);
-    irEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "irEnabled", irOnBtn);
 
     // File name label
     irFileLabel.setFont(juce::Font(10.5f));
@@ -394,6 +474,21 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
             ? imagesTree.createCopy()
             : juce::ValueTree("SectionImages");
         loadSectionImagesFromTree();
+
+        // Restore section colours from preset and apply to controls
+        auto ct = newState.getChildWithName("SectionColours");
+        if (ct.isValid())
+        {
+            for (int i = 0; i < ct.getNumChildren(); ++i)
+            {
+                auto e = ct.getChild(i);
+                int idx = (int)e.getProperty("idx");
+                juce::String hex = e.getProperty("hex").toString();
+                if (idx >= 0 && idx < SectionColourSet::kNumSections && hex.isNotEmpty())
+                    audioProcessor.sectionColours.colours[idx] = juce::Colour::fromString(hex);
+            }
+        }
+        applySectionColours();
     };
     addAndMakeVisible(presetBox);
 
@@ -416,6 +511,16 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
         "80","250","500","1k","2k","4k","8k","16k"
     };
 
+    static const char* kEqFreqParamIds[EQProcessor::kNumBands] = {
+        "eq1Freq","eq2Freq","eq3Freq","eq4Freq",
+        "eq5Freq","eq6Freq","eq7Freq","eq8Freq"
+    };
+
+    auto formatFreqLabel = [](float hz) -> juce::String {
+        if (hz >= 1000.0f) return juce::String(hz / 1000.0f, 1) + "k";
+        return juce::String(juce::roundToInt(hz));
+    };
+
     for (int b = 0; b < EQProcessor::kNumBands; ++b)
     {
         auto& s = eqSliders[b];
@@ -427,26 +532,106 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
         s.setDoubleClickReturnValue(true, 0.0);
         addAndMakeVisible(s);
 
+        // Gain value label (above slider, editable)
+        auto& vl = eqGainValueLabels[b];
+        vl.setText("0.0", juce::dontSendNotification);
+        vl.setFont(juce::Font(10.0f));
+        vl.setColour(juce::Label::textColourId, kText);
+        vl.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+        vl.setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
+        vl.setJustificationType(juce::Justification::centred);
+        vl.setEditable(true, true, false);
+        vl.onEditorShow = [this, b] {
+            if (auto* ed = eqGainValueLabels[b].getCurrentTextEditor())
+                ed->setInputRestrictions(8, "-0123456789.");
+        };
+        vl.onTextChange = [this, b] {
+            float val = eqGainValueLabels[b].getText().getFloatValue();
+            eqSliders[b].setValue(val, juce::sendNotification);
+        };
+        addAndMakeVisible(vl);
+
+        s.onValueChange = [this, b] {
+            eqGainValueLabels[b].setText(
+                juce::String(eqSliders[b].getValue(), 1),
+                juce::dontSendNotification);
+        };
+
+        // Frequency label (below slider, editable, reflects param value)
         auto& l = eqLabels[b];
-        l.setText(kEqLabels[b], juce::dontSendNotification);
+        float freqVal = audioProcessor.apvts.getRawParameterValue(kEqFreqParamIds[b])->load();
+        l.setText(formatFreqLabel(freqVal), juce::dontSendNotification);
         l.setFont(juce::Font(10.0f, juce::Font::bold));
         l.setColour(juce::Label::textColourId, kSubText);
         l.setJustificationType(juce::Justification::centred);
+        l.setEditable(true, true, false);
+        l.onEditorShow = [this, b] {
+            if (auto* ed = eqLabels[b].getCurrentTextEditor())
+            {
+                ed->setInputRestrictions(8, "0123456789.");
+                // Show raw Hz value when editing
+                float hz = audioProcessor.apvts.getRawParameterValue(
+                    (juce::String("eq") + juce::String(b + 1) + "Freq").toRawUTF8())->load();
+                ed->setText(juce::String(juce::roundToInt(hz)), false);
+            }
+        };
+        l.onTextChange = [this, b, formatFreqLabel] {
+            float hz = eqLabels[b].getText().getFloatValue();
+            juce::String freqParamId = "eq" + juce::String(b + 1) + "Freq";
+            if (auto* param = audioProcessor.apvts.getParameter(freqParamId))
+                param->setValueNotifyingHost(param->convertTo0to1(hz));
+            eqLabels[b].setText(formatFreqLabel(hz), juce::dontSendNotification);
+        };
         addAndMakeVisible(l);
 
         eqAtts[b] = std::make_unique<SliderAtt>(
             audioProcessor.apvts, kEqParamIds[b], s);
     }
 
+
     // ---- Output volume -------------------------------------------------------
     setupLargeKnob(outputVolSlider, outputVolLabel, "VOL");
     outputVolAtt = std::make_unique<SliderAtt>(audioProcessor.apvts, "outputVolume", outputVolSlider);
+
+    // ---- Section bypass buttons -----------------------------------------------
+    setupBypassButton(bypassGateBtn);
+    // Gate: enabled=true means NOT bypassed, so invert button colours
+    bypassGateBtn.setColour(juce::TextButton::buttonColourId,   kAccent.withAlpha(0.2f));
+    bypassGateBtn.setColour(juce::TextButton::buttonOnColourId, kAccent);
+    gateEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "noiseGateEnabled", bypassGateBtn);
+
+    setupBypassButton(bypassPreEqBtn);
+    bypassPreEqAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassPreEq", bypassPreEqBtn);
+
+    setupBypassButton(bypassPreCompBtn);
+    bypassPreCompAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassPreComp", bypassPreCompBtn);
+
+    setupBypassButton(bypassAmpBtn);
+    bypassAmpAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassAmp", bypassAmpBtn);
+
+    setupBypassButton(bypassCabinetBtn);
+    // Cabinet: enabled=true means NOT bypassed, so invert button colours
+    bypassCabinetBtn.setColour(juce::TextButton::buttonColourId,   kAccent.withAlpha(0.2f));
+    bypassCabinetBtn.setColour(juce::TextButton::buttonOnColourId, kAccent);
+    irEnabledAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "irEnabled", bypassCabinetBtn);
+
+    setupBypassButton(bypassPostEqBtn);
+    bypassPostEqAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassPostEq", bypassPostEqBtn);
+
+    setupBypassButton(bypassPostCompBtn);
+    bypassPostCompAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassPostComp", bypassPostCompBtn);
+
+    setupBypassButton(bypassMfEqBtn);
+    bypassMfEqAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassMfEq", bypassMfEqBtn);
 
     // Apply custom knob ranges from processor state
     applyAllKnobRanges();
 
     // Load any section images already present in processor state (e.g. DAW project restore)
     loadSectionImagesFromTree();
+
+    // Apply section colours to all controls (knobs, sliders, labels, buttons, combos)
+    applySectionColours();
 }
 
 GuitarAmpAudioProcessorEditor::~GuitarAmpAudioProcessorEditor()
@@ -575,6 +760,77 @@ void GuitarAmpAudioProcessorEditor::styleButton(juce::TextButton& b, bool isTogg
     (void)isToggle;
 }
 
+void GuitarAmpAudioProcessorEditor::setupBypassButton(juce::TextButton& btn)
+{
+    btn.setClickingTogglesState(true);
+    btn.setButtonText("");
+    btn.setTooltip("bypass");
+    btn.setColour(juce::TextButton::buttonColourId,   kAccent);
+    btn.setColour(juce::TextButton::buttonOnColourId,  kAccent.withAlpha(0.2f));
+    btn.setColour(juce::TextButton::textColourOffId,   juce::Colours::transparentBlack);
+    btn.setColour(juce::TextButton::textColourOnId,    juce::Colours::transparentBlack);
+    btn.onClick = [this] { updateBypassVisuals(); };
+    addAndMakeVisible(btn);
+}
+
+void GuitarAmpAudioProcessorEditor::updateBypassVisuals()
+{
+    // Gate bypass is inverted: enabled=true means NOT bypassed
+    bool gateBypassed = !bypassGateBtn.getToggleState();
+    gateThreshSlider.setAlpha(gateBypassed ? 0.2f : 1.0f);
+    gateThreshLabel .setAlpha(gateBypassed ? 0.2f : 1.0f);
+
+    auto setAlpha = [](float a, auto&... comps) { (comps.setAlpha(a), ...); };
+
+    bool preEqBypassed = bypassPreEqBtn.getToggleState();
+    setAlpha(preEqBypassed ? 0.2f : 1.0f,
+        preEqLowSlider, preEqMidSlider, preEqHighSlider,
+        preEqLowLabel, preEqMidLabel, preEqHighLabel,
+        preEqLowFreqSlider, preEqMidFreqSlider, preEqHighFreqSlider,
+        preEqLowFreqLabel, preEqMidFreqLabel, preEqHighFreqLabel);
+
+    bool preCompBypassed = bypassPreCompBtn.getToggleState();
+    setAlpha(preCompBypassed ? 0.2f : 1.0f,
+        preCompThreshSlider, preCompRatioSlider, preCompAttackSlider,
+        preCompReleaseSlider, preCompMakeupSlider, preCompBlendSlider,
+        preCompThreshLabel, preCompRatioLabel, preCompAttackLabel,
+        preCompReleaseLabel, preCompMakeupLabel, preCompBlendLabel,
+        preCompRatioValueLabel, preCompRatioDivLabel, preCompRatioOneLabel);
+
+    bool ampBypassed = bypassAmpBtn.getToggleState();
+    setAlpha(ampBypassed ? 0.2f : 1.0f,
+        gainSlider, masterSlider, gainLabel, masterLabel,
+        loadModelBtn, modelFileLabel);
+
+    // Cabinet bypass is inverted: enabled=true means NOT bypassed
+    bool cabBypassed = !bypassCabinetBtn.getToggleState();
+    setAlpha(cabBypassed ? 0.2f : 1.0f,
+        irPresetBox, loadIRBtn, irFileLabel);
+
+    bool postEqBypassed = bypassPostEqBtn.getToggleState();
+    setAlpha(postEqBypassed ? 0.2f : 1.0f,
+        postEqLowSlider, postEqMidSlider, postEqHighSlider,
+        postEqLowLabel, postEqMidLabel, postEqHighLabel,
+        postEqLowFreqSlider, postEqMidFreqSlider, postEqHighFreqSlider,
+        postEqLowFreqLabel, postEqMidFreqLabel, postEqHighFreqLabel);
+
+    bool postCompBypassed = bypassPostCompBtn.getToggleState();
+    setAlpha(postCompBypassed ? 0.2f : 1.0f,
+        postCompThreshSlider, postCompRatioSlider, postCompAttackSlider,
+        postCompReleaseSlider, postCompMakeupSlider, postCompBlendSlider,
+        postCompThreshLabel, postCompRatioLabel, postCompAttackLabel,
+        postCompReleaseLabel, postCompMakeupLabel, postCompBlendLabel,
+        postCompRatioValueLabel, postCompRatioDivLabel, postCompRatioOneLabel);
+
+    bool mfEqBypassed = bypassMfEqBtn.getToggleState();
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+    {
+        eqSliders[b]        .setAlpha(mfEqBypassed ? 0.2f : 1.0f);
+        eqLabels[b]         .setAlpha(mfEqBypassed ? 0.2f : 1.0f);
+        eqGainValueLabels[b].setAlpha(mfEqBypassed ? 0.2f : 1.0f);
+    }
+}
+
 void GuitarAmpAudioProcessorEditor::syncIRPresetBox()
 {
     // The loaded IR name matches a bundled IR's display name (spaces replacing underscores)
@@ -640,6 +896,14 @@ void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
                 if (name.isEmpty()) return;
 
                 auto state = audioProcessor.apvts.copyState();
+
+                for (auto c = state.getChildWithName("KnobRanges"); c.isValid();
+                     c = state.getChildWithName("KnobRanges"))
+                    state.removeChild(c, nullptr);
+                for (auto c = state.getChildWithName("SectionImages"); c.isValid();
+                     c = state.getChildWithName("SectionImages"))
+                    state.removeChild(c, nullptr);
+
                 state.setProperty("irFilePath",
                     audioProcessor.irLoader.getFilePath(), nullptr);
                 state.setProperty("bundledIRName",
@@ -662,6 +926,21 @@ void GuitarAmpAudioProcessorEditor::saveCurrentPreset()
                 saveSectionImagesToTree();
                 if (audioProcessor.sectionImagesTree.getNumChildren() > 0)
                     state.addChild(audioProcessor.sectionImagesTree.createCopy(), -1, nullptr);
+
+                // Save section colours
+                for (auto c = state.getChildWithName("SectionColours"); c.isValid();
+                     c = state.getChildWithName("SectionColours"))
+                    state.removeChild(c, nullptr);
+
+                juce::ValueTree coloursTree("SectionColours");
+                for (int i = 0; i < SectionColourSet::kNumSections; ++i)
+                {
+                    juce::ValueTree e("Colour");
+                    e.setProperty("idx", i, nullptr);
+                    e.setProperty("hex", audioProcessor.sectionColours.colours[i].toDisplayString(true), nullptr);
+                    coloursTree.addChild(e, -1, nullptr);
+                }
+                state.addChild(coloursTree, -1, nullptr);
 
                 auto xml = state.createXml();
                 xml->writeTo(getPresetDirectory().getChildFile(name + ".xml"));
@@ -710,6 +989,7 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
     menu.addSeparator();
     menu.addItem(2, "Knob Ranges...");
     menu.addItem(3, "Section Images...");
+    menu.addItem(4, "Section Colors...");
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
         [this](int result)
@@ -726,11 +1006,26 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
             {
                 auto* dialog = new KnobRangesDialog(audioProcessor,
                     [this] { rebuildAllAttachments(); });
-                dialog->setSize(420, 520);
+                dialog->setSize(420, 600);
 
                 juce::DialogWindow::LaunchOptions opts;
                 opts.content.setOwned(dialog);
                 opts.dialogTitle                = "Knob Ranges";
+                opts.dialogBackgroundColour     = juce::Colour(0xff141414);
+                opts.escapeKeyTriggersCloseButton = true;
+                opts.useNativeTitleBar          = false;
+                opts.resizable                  = false;
+                opts.launchAsync();
+            }
+            else if (result == 4)
+            {
+                auto* dialog = new SectionColoursDialog(audioProcessor,
+                    [this] { applySectionColours(); });
+                dialog->setSize(380, 480);
+
+                juce::DialogWindow::LaunchOptions opts;
+                opts.content.setOwned(dialog);
+                opts.dialogTitle                = "Section Colors";
                 opts.dialogBackgroundColour     = juce::Colour(0xff141414);
                 opts.escapeKeyTriggersCloseButton = true;
                 opts.useNativeTitleBar          = false;
@@ -770,6 +1065,142 @@ void GuitarAmpAudioProcessorEditor::applyAllKnobRanges()
     applyKnobRange(postCompReleaseSlider,"postCompRelease");
     applyKnobRange(postCompMakeupSlider, "postCompMakeup");
     applyKnobRange(postCompBlendSlider,  "postCompBlend");
+
+    static const char* kEqIds[] = { "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
+                                     "eq5Gain","eq6Gain","eq7Gain","eq8Gain" };
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        applyKnobRange(eqSliders[b], kEqIds[b]);
+}
+
+void GuitarAmpAudioProcessorEditor::applySectionColours()
+{
+    const auto& sc = audioProcessor.sectionColours.colours;
+
+    auto tintKnob = [](juce::Slider& s, juce::Label& l, juce::Colour c)
+    {
+        s.setColour(juce::Slider::rotarySliderFillColourId,    c);
+        s.setColour(juce::Slider::rotarySliderOutlineColourId, c.withAlpha(0.25f));
+        s.setColour(juce::Slider::thumbColourId,               c.brighter(0.3f));
+        s.setColour(juce::Slider::textBoxTextColourId,         c.withAlpha(0.85f));
+        l.setColour(juce::Label::textColourId,                 c.withAlpha(0.7f));
+    };
+
+    auto tintLargeKnob = [](juce::Slider& s, juce::Label& l, juce::Colour c)
+    {
+        s.setColour(juce::Slider::rotarySliderFillColourId,    c);
+        s.setColour(juce::Slider::rotarySliderOutlineColourId, c.withAlpha(0.35f));
+        s.setColour(juce::Slider::thumbColourId,               c.brighter(0.4f));
+        s.setColour(juce::Slider::textBoxTextColourId,         c.withAlpha(0.85f));
+        l.setColour(juce::Label::textColourId,                 c.withAlpha(0.9f));
+    };
+
+    auto tintFreqSlider = [](juce::Slider& s, juce::Label& l, juce::Colour c)
+    {
+        s.setColour(juce::Slider::trackColourId, c.withAlpha(0.6f));
+        s.setColour(juce::Slider::thumbColourId, c);
+        (void)l;
+    };
+
+    auto tintEqSlider = [](juce::Slider& s, juce::Label& /*l*/, juce::Colour c)
+    {
+        s.setColour(juce::Slider::trackColourId, c);
+        s.setColour(juce::Slider::thumbColourId, c.brighter(0.4f));
+    };
+
+    auto tintButton = [](juce::TextButton& b, juce::Colour c)
+    {
+        b.setColour(juce::TextButton::buttonColourId,   c);
+        b.setColour(juce::TextButton::buttonOnColourId, c.withAlpha(0.2f));
+    };
+
+    auto tintInvertedButton = [](juce::TextButton& b, juce::Colour c)
+    {
+        b.setColour(juce::TextButton::buttonColourId,   c.withAlpha(0.2f));
+        b.setColour(juce::TextButton::buttonOnColourId, c);
+    };
+
+    auto tintComboBox = [](juce::ComboBox& cb, juce::Colour c)
+    {
+        cb.setColour(juce::ComboBox::arrowColourId, c);
+    };
+
+    // kInput
+    tintKnob(inputTrimSlider, inputTrimLabel, sc[kInput]);
+
+    // kGate
+    tintLargeKnob(gateThreshSlider, gateThreshLabel, sc[kGate]);
+    tintInvertedButton(bypassGateBtn, sc[kGate]);
+
+    // kPreEq
+    {
+        auto c = sc[kPreEq];
+        tintKnob(preEqLowSlider,  preEqLowLabel,  c);
+        tintKnob(preEqMidSlider,  preEqMidLabel,  c);
+        tintKnob(preEqHighSlider, preEqHighLabel, c);
+        tintFreqSlider(preEqLowFreqSlider,  preEqLowFreqLabel,  c);
+        tintFreqSlider(preEqMidFreqSlider,  preEqMidFreqLabel,  c);
+        tintFreqSlider(preEqHighFreqSlider, preEqHighFreqLabel, c);
+        tintButton(bypassPreEqBtn, c);
+    }
+
+    // kPreComp
+    {
+        auto c = sc[kPreComp];
+        tintKnob(preCompThreshSlider,  preCompThreshLabel,  c);
+        tintKnob(preCompRatioSlider,   preCompRatioLabel,   c);
+        tintKnob(preCompAttackSlider,  preCompAttackLabel,  c);
+        tintKnob(preCompReleaseSlider, preCompReleaseLabel, c);
+        tintKnob(preCompMakeupSlider,  preCompMakeupLabel,  c);
+        tintKnob(preCompBlendSlider,   preCompBlendLabel,   c);
+        tintButton(bypassPreCompBtn, c);
+    }
+
+    // kAmp
+    tintLargeKnob(gainSlider, gainLabel, sc[kAmp]);
+    tintKnob(masterSlider, masterLabel, sc[kAmp]);
+    tintButton(bypassAmpBtn, sc[kAmp]);
+
+    // kCabinet
+    tintComboBox(irPresetBox, sc[kCabinet]);
+    tintButton(loadIRBtn, sc[kCabinet]);
+    tintInvertedButton(bypassCabinetBtn, sc[kCabinet]);
+
+    // kPostEq
+    {
+        auto c = sc[kPostEq];
+        tintKnob(postEqLowSlider,  postEqLowLabel,  c);
+        tintKnob(postEqMidSlider,  postEqMidLabel,  c);
+        tintKnob(postEqHighSlider, postEqHighLabel, c);
+        tintFreqSlider(postEqLowFreqSlider,  postEqLowFreqLabel,  c);
+        tintFreqSlider(postEqMidFreqSlider,  postEqMidFreqLabel,  c);
+        tintFreqSlider(postEqHighFreqSlider, postEqHighFreqLabel, c);
+        tintButton(bypassPostEqBtn, c);
+    }
+
+    // kPostComp
+    {
+        auto c = sc[kPostComp];
+        tintKnob(postCompThreshSlider,  postCompThreshLabel,  c);
+        tintKnob(postCompRatioSlider,   postCompRatioLabel,   c);
+        tintKnob(postCompAttackSlider,  postCompAttackLabel,  c);
+        tintKnob(postCompReleaseSlider, postCompReleaseLabel, c);
+        tintKnob(postCompMakeupSlider,  postCompMakeupLabel,  c);
+        tintKnob(postCompBlendSlider,   postCompBlendLabel,   c);
+        tintButton(bypassPostCompBtn, c);
+    }
+
+    // kMfEq
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+    {
+        tintEqSlider(eqSliders[b], eqLabels[b], sc[kMfEq]);
+        eqGainValueLabels[b].setColour(juce::Label::textColourId, sc[kMfEq].withAlpha(0.85f));
+    }
+    tintButton(bypassMfEqBtn, sc[kMfEq]);
+
+    // kOutput
+    tintLargeKnob(outputVolSlider, outputVolLabel, sc[kOutput]);
+
+    repaint();
 }
 
 void GuitarAmpAudioProcessorEditor::rebuildAllAttachments()
@@ -836,6 +1267,20 @@ void GuitarAmpAudioProcessorEditor::rebuildAllAttachments()
 
     // Re-apply custom ranges after recreating attachments
     applyAllKnobRanges();
+
+    // Refresh EQ gain and frequency labels
+    auto fmtFreq = [](float hz) -> juce::String {
+        if (hz >= 1000.0f) return juce::String(hz / 1000.0f, 1) + "k";
+        return juce::String(juce::roundToInt(hz));
+    };
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+    {
+        eqGainValueLabels[b].setText(
+            juce::String(eqSliders[b].getValue(), 1), juce::dontSendNotification);
+        float hz = audioProcessor.apvts.getRawParameterValue(
+            (juce::String("eq") + juce::String(b + 1) + "Freq").toRawUTF8())->load();
+        eqLabels[b].setText(fmtFreq(hz), juce::dontSendNotification);
+    }
 }
 
 void GuitarAmpAudioProcessorEditor::loadModelFile()
@@ -972,6 +1417,18 @@ void GuitarAmpAudioProcessorEditor::saveSectionImagesToTree()
         e.setProperty("data",      b64,        nullptr);
         tree.addChild(e, -1, nullptr);
     }
+    // Save tuner needle image
+    if (tunerDisplay.needleImage.isValid())
+    {
+        juce::MemoryOutputStream pngStream;
+        juce::PNGImageFormat pngFmt;
+        pngFmt.writeImageToStream(tunerDisplay.needleImage, pngStream);
+        juce::String b64 = juce::Base64::toBase64(pngStream.getData(), pngStream.getDataSize());
+        juce::ValueTree e("TunerNeedle");
+        e.setProperty("data", b64, nullptr);
+        tree.addChild(e, -1, nullptr);
+    }
+
     audioProcessor.sectionImagesTree = tree;
 }
 
@@ -979,11 +1436,27 @@ void GuitarAmpAudioProcessorEditor::loadSectionImagesFromTree()
 {
     for (auto& sd : sectionImages)
         sd = SectionImageData{};
+    tunerDisplay.needleImage = juce::Image{};
 
     auto& tree = audioProcessor.sectionImagesTree;
     for (int i = 0; i < tree.getNumChildren(); ++i)
     {
         auto e = tree.getChild(i);
+
+        // Load tuner needle
+        if (e.hasType("TunerNeedle"))
+        {
+            juce::String b64 = e.getProperty("data", "").toString();
+            if (b64.isNotEmpty())
+            {
+                juce::MemoryOutputStream decoded;
+                juce::Base64::convertFromBase64(decoded, b64);
+                juce::MemoryInputStream pngStream(decoded.getData(), decoded.getDataSize(), false);
+                tunerDisplay.needleImage = juce::ImageFileFormat::loadFrom(pngStream);
+            }
+            continue;
+        }
+
         int id = (int)e.getProperty("sectionId", -1);
         if (id < 0 || id >= kNumSections) continue;
 
@@ -1057,6 +1530,20 @@ void GuitarAmpAudioProcessorEditor::showImageManagementMenu()
     }
 
     menu.addSeparator();
+
+    // Tuner needle image option
+    {
+        juce::PopupMenu needleSub;
+        needleSub.addItem(9901, "Load Image...");
+        if (tunerDisplay.needleImage.isValid())
+            needleSub.addItem(9902, "Remove Image");
+        juce::String needleLabel = "TUNER NEEDLE";
+        if (tunerDisplay.needleImage.isValid())
+            needleLabel += juce::String::fromUTF8("  \xe2\x9c\x93");
+        menu.addSubMenu(needleLabel, needleSub);
+    }
+
+    menu.addSeparator();
     menu.addItem(9999, "Clear All Images");
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
@@ -1066,6 +1553,37 @@ void GuitarAmpAudioProcessorEditor::showImageManagementMenu()
             {
                 for (auto& sd : sectionImages)
                     sd = SectionImageData{};
+                tunerDisplay.needleImage = juce::Image{};
+                repaint();
+                saveSectionImagesToTree();
+                return;
+            }
+
+            if (result == 9901)
+            {
+                // Load tuner needle image
+                imageFileChooser = std::make_unique<juce::FileChooser>(
+                    "Select Tuner Needle Image",
+                    juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+                    "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tiff;*.tif");
+                imageFileChooser->launchAsync(
+                    juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                    [this](const juce::FileChooser& fc)
+                    {
+                        auto result = fc.getResult();
+                        if (result.existsAsFile())
+                        {
+                            tunerDisplay.needleImage = juce::ImageFileFormat::loadFrom(result);
+                            repaint();
+                            saveSectionImagesToTree();
+                        }
+                    });
+                return;
+            }
+
+            if (result == 9902)
+            {
+                tunerDisplay.needleImage = juce::Image{};
                 repaint();
                 saveSectionImagesToTree();
                 return;
@@ -1146,19 +1664,20 @@ void GuitarAmpAudioProcessorEditor::paint(juce::Graphics& g)
     int wLimiter  = W - m - xLimiter;
 
     struct SectionStyle { int x, y, w, h; juce::Colour border; bool comp; const char* label; };
+    const auto& sc = audioProcessor.sectionColours.colours;
     const SectionStyle sections[] = {
         // Row 1
-        { xInput,    row1Y, wInput,    row1H, juce::Colour(0xffaa44cc), false, "INPUT"      },
-        { xGate,     row1Y, wGate,     row1H, juce::Colour(0xff2277dd), false, "NOISE GATE" },
-        { xPreEQ,    row1Y, wPreEQ,    row1H, kAccent,                  false, "PRE EQ"     },
-        { xPreComp,  row1Y, wPreComp,  row1H, kGreen,                   true,  "PRE COMP"   },
-        { xAmp,      row1Y, wAmp,      row1H, kAccent,                  false, "AMP"        },
-        { xCab,      row1Y, wCab,      row1H, kAccent,                  false, "CABINET"    },
+        { xInput,    row1Y, wInput,    row1H, sc[kInput],    false, "INPUT"      },
+        { xGate,     row1Y, wGate,     row1H, sc[kGate],     false, "NOISE GATE" },
+        { xPreEQ,    row1Y, wPreEQ,    row1H, sc[kPreEq],    false, "PRE EQ"     },
+        { xPreComp,  row1Y, wPreComp,  row1H, sc[kPreComp],  true,  "PRE COMP"   },
+        { xAmp,      row1Y, wAmp,      row1H, sc[kAmp],      false, "AMP"        },
+        { xCab,      row1Y, wCab,      row1H, sc[kCabinet],  false, "CABINET"    },
         // Row 2
-        { xPostEQ,   row2Y, wPostEQ,   row2H, kAccent,                  false, "POST EQ"    },
-        { xPostComp, row2Y, wPostComp, row2H, kGreen,                   true,  "POST COMP"  },
-        { xPostIREQ, row2Y, wPostIREQ, row2H, kAccent,                  false, "MF EQ"      },
-        { xLimiter,  row2Y, wLimiter,  row2H, kAccent,                  false, "OUTPUT"     },
+        { xPostEQ,   row2Y, wPostEQ,   row2H, sc[kPostEq],   false, "POST EQ"    },
+        { xPostComp, row2Y, wPostComp, row2H, sc[kPostComp], true,  "POST COMP"  },
+        { xPostIREQ, row2Y, wPostIREQ, row2H, sc[kMfEq],     false, "MF EQ"      },
+        { xLimiter,  row2Y, wLimiter,  row2H, sc[kOutput],   false, "OUTPUT"     },
     };
 
     for (int si = 0; si < (int)std::size(sections); ++si)
@@ -1232,9 +1751,9 @@ void GuitarAmpAudioProcessorEditor::resized()
     int wLimiter  = W - m - xLimiter;
 
     // === Header ===
-    deletePresetBtn.setBounds(W - 44,  12, 36, 26);
-    savePresetBtn  .setBounds(W - 86,  12, 38, 26);
-    presetBox      .setBounds(W - 220, 12, 130, 26);
+    savePresetBtn  .setBounds(W - 48,   2, 40, 18);
+    deletePresetBtn.setBounds(W - 48,  22, 40, 18);
+    presetBox      .setBounds(W - 200, 12, 148, 26);
     settingsBtn    .setBounds(148, 14, 80, 28);
     tunerToggle    .setBounds(234, 14, 70, 28);
     tunerDisplay   .setBounds(310,  8, W - 538, 40);
@@ -1249,9 +1768,8 @@ void GuitarAmpAudioProcessorEditor::resized()
     // === NOISE GATE (row 1) ===
     {
         const int x = xGate, w = wGate;
-        gateEnableBtn   .setBounds(x + (w - 80) / 2, row1Y + 40, 80, 24);
-        gateThreshLabel .setBounds(x + 6,             row1Y + 84, w - 12, 14);
-        gateThreshSlider.setBounds(x + 6,             row1Y + 98, w - 12, 180);
+        gateThreshLabel .setBounds(x + 6,             row1Y + 52, w - 12, 14);
+        gateThreshSlider.setBounds(x + 6,             row1Y + 66, w - 12, 200);
     }
 
     // === PRE EQ (row 1) — 3 knobs + freq sliders ===
@@ -1284,6 +1802,14 @@ void GuitarAmpAudioProcessorEditor::resized()
         preCompThreshSlider .setBounds(x + 5,          y0 + 14, colW, knobH);
         preCompRatioLabel   .setBounds(x + 5 + colW,   y0,      colW, 14);
         preCompRatioSlider  .setBounds(x + 5 + colW,   y0 + 14, colW, knobH);
+        {
+            const int ry = y0 + 14 + knobH;
+            const int rx = x + 5 + colW;
+            const int tw = colW / 3;
+            preCompRatioValueLabel.setBounds(rx,          ry, tw + 6, 16);
+            preCompRatioDivLabel  .setBounds(rx + tw + 6, ry, 10,     16);
+            preCompRatioOneLabel  .setBounds(rx + tw + 16,ry, tw - 8, 16);
+        }
         preCompAttackLabel  .setBounds(x + 5 + colW*2, y0,      colW, 14);
         preCompAttackSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, knobH);
         const int y1 = y0 + rowH;
@@ -1311,8 +1837,7 @@ void GuitarAmpAudioProcessorEditor::resized()
     {
         const int x = xCab, w = wCab;
         irPresetBox.setBounds(x + 6,          row1Y + 97,  w - 12, 26);
-        loadIRBtn  .setBounds(x + 6,          row1Y + 129, w - 16 - 84, 24);
-        irOnBtn    .setBounds(x + w - 6 - 84, row1Y + 129, 84, 24);
+        loadIRBtn  .setBounds(x + 6,          row1Y + 129, w - 12, 24);
         irFileLabel.setBounds(x + 6,          row1Y + 161, w - 12, 60);
     }
 
@@ -1346,6 +1871,14 @@ void GuitarAmpAudioProcessorEditor::resized()
         postCompThreshSlider .setBounds(x + 5,          y0 + 14, colW, knobH);
         postCompRatioLabel   .setBounds(x + 5 + colW,   y0,      colW, 14);
         postCompRatioSlider  .setBounds(x + 5 + colW,   y0 + 14, colW, knobH);
+        {
+            const int ry = y0 + 14 + knobH;
+            const int rx = x + 5 + colW;
+            const int tw = colW / 3;
+            postCompRatioValueLabel.setBounds(rx,          ry, tw + 6, 16);
+            postCompRatioDivLabel  .setBounds(rx + tw + 6, ry, 10,     16);
+            postCompRatioOneLabel  .setBounds(rx + tw + 16,ry, tw - 8, 16);
+        }
         postCompAttackLabel  .setBounds(x + 5 + colW*2, y0,      colW, 14);
         postCompAttackSlider .setBounds(x + 5 + colW*2, y0 + 14, colW, knobH);
         const int y1 = y0 + rowH;
@@ -1362,12 +1895,15 @@ void GuitarAmpAudioProcessorEditor::resized()
         const int x      = xPostIREQ;
         const int w      = wPostIREQ;
         const int bandW  = (w - 8) / EQProcessor::kNumBands;
-        const int sliderH = row2H - 50;
+        const int gainLblH = 16;
+        const int freqLblH = 14;
+        const int sliderH  = row2H - 20 - gainLblH - freqLblH - 4;
         for (int b = 0; b < EQProcessor::kNumBands; ++b)
         {
             const int bx = x + 4 + b * bandW;
-            eqSliders[b].setBounds(bx, row2Y + 20,            bandW, sliderH);
-            eqLabels [b].setBounds(bx, row2Y + 20 + sliderH,  bandW, 14);
+            eqGainValueLabels[b].setBounds(bx, row2Y + 20,                        bandW, gainLblH);
+            eqSliders[b]       .setBounds(bx, row2Y + 20 + gainLblH,             bandW, sliderH);
+            eqLabels[b]        .setBounds(bx, row2Y + 20 + gainLblH + sliderH,   bandW, freqLblH);
         }
     }
 
@@ -1380,4 +1916,23 @@ void GuitarAmpAudioProcessorEditor::resized()
         outputVolLabel .setBounds(kx, ky - 18, knobSize, 16);
         outputVolSlider.setBounds(kx, ky,      knobSize, knobSize);
     }
+
+    // === Bypass buttons (bottom-center of each section) ===
+    {
+        const int bw = 24, bh = 14;
+        auto placeBypass = [&](juce::TextButton& btn, int sx, int sy, int sw, int sh)
+        {
+            btn.setBounds(sx + (sw - bw) / 2, sy + sh - bh - 4, bw, bh);
+        };
+        placeBypass(bypassGateBtn,     xGate,     row1Y, wGate,     row1H);
+        placeBypass(bypassPreEqBtn,    xPreEQ,    row1Y, wPreEQ,    row1H);
+        placeBypass(bypassPreCompBtn,  xPreComp,  row1Y, wPreComp,  row1H);
+        placeBypass(bypassAmpBtn,      xAmp,      row1Y, wAmp,      row1H);
+        placeBypass(bypassCabinetBtn,  xCab,      row1Y, wCab,      row1H);
+        placeBypass(bypassPostEqBtn,   xPostEQ,   row2Y, wPostEQ,   row2H);
+        placeBypass(bypassPostCompBtn, xPostComp, row2Y, wPostComp, row2H);
+        placeBypass(bypassMfEqBtn,     xPostIREQ, row2Y, wPostIREQ, row2H);
+    }
+
+    updateBypassVisuals();
 }

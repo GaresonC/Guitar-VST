@@ -45,7 +45,7 @@ GuitarAmpAudioProcessor::createParameterLayout()
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"inputGain", 1}, "Input Gain",
-        juce::NormalisableRange<float>(-20.0f, 80.0f), 20.0f,
+        juce::NormalisableRange<float>(-20.0f, 10.0f), 0.0f,
         juce::String{}, juce::AudioProcessorParameter::genericParameter,
         dbFmt, dbParse));
 
@@ -63,6 +63,20 @@ GuitarAmpAudioProcessor::createParameterLayout()
 
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"noiseGateEnabled", 1}, "Gate Enabled", true));
+
+    // Section bypass parameters
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassPreEq", 1}, "Bypass Pre EQ", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassPreComp", 1}, "Bypass Pre Comp", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassAmp", 1}, "Bypass Amp", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassPostEq", 1}, "Bypass Post EQ", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassPostComp", 1}, "Bypass Post Comp", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"bypassMfEq", 1}, "Bypass MF EQ", false));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"noiseGateThreshold", 1}, "Gate Threshold",
@@ -216,6 +230,23 @@ GuitarAmpAudioProcessor::createParameterLayout()
             juce::String{}, juce::AudioProcessorParameter::genericParameter,
             dbFmt, dbParse));
 
+    // 8-band post-IR EQ frequencies
+    static const char* eqFreqIds[EQProcessor::kNumBands] = {
+        "eq1Freq","eq2Freq","eq3Freq","eq4Freq",
+        "eq5Freq","eq6Freq","eq7Freq","eq8Freq"
+    };
+    static const char* eqFreqNames[EQProcessor::kNumBands] = {
+        "EQ1 Freq","EQ2 Freq","EQ3 Freq","EQ4 Freq",
+        "EQ5 Freq","EQ6 Freq","EQ7 Freq","EQ8 Freq"
+    };
+    for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{eqFreqIds[b], 1}, eqFreqNames[b],
+            juce::NormalisableRange<float>(20.0f, 20000.0f, 0.0f, 0.3f),
+            EQProcessor::kBandFreqs[b],
+            juce::String{}, juce::AudioProcessorParameter::genericParameter,
+            hzFmt, hzParse));
+
     return { params.begin(), params.end() };
 }
 
@@ -329,42 +360,53 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     // Pre-amp stage: EQ + compression before distortion
-    preAmpStage.update(
-        apvts.getRawParameterValue("preEqLow")->load(),
-        apvts.getRawParameterValue("preEqMid")->load(),
-        apvts.getRawParameterValue("preEqHigh")->load(),
-        apvts.getRawParameterValue("preEqLowFreq")->load(),
-        apvts.getRawParameterValue("preEqMidFreq")->load(),
-        apvts.getRawParameterValue("preEqHighFreq")->load(),
-        apvts.getRawParameterValue("preCompThresh")->load(),
-        apvts.getRawParameterValue("preCompRatio")->load(),
-        apvts.getRawParameterValue("preCompAttack")->load(),
-        apvts.getRawParameterValue("preCompRelease")->load(),
-        apvts.getRawParameterValue("preCompMakeup")->load(),
-        apvts.getRawParameterValue("preCompBlend")->load());
-    preAmpStage.process(buffer);
+    {
+        const bool bypassEq   = apvts.getRawParameterValue("bypassPreEq")->load() > 0.5f;
+        const bool bypassComp = apvts.getRawParameterValue("bypassPreComp")->load() > 0.5f;
+        preAmpStage.update(
+            bypassEq ? 0.0f : apvts.getRawParameterValue("preEqLow")->load(),
+            bypassEq ? 0.0f : apvts.getRawParameterValue("preEqMid")->load(),
+            bypassEq ? 0.0f : apvts.getRawParameterValue("preEqHigh")->load(),
+            apvts.getRawParameterValue("preEqLowFreq")->load(),
+            apvts.getRawParameterValue("preEqMidFreq")->load(),
+            apvts.getRawParameterValue("preEqHighFreq")->load(),
+            apvts.getRawParameterValue("preCompThresh")->load(),
+            bypassComp ? 1.0f : apvts.getRawParameterValue("preCompRatio")->load(),
+            apvts.getRawParameterValue("preCompAttack")->load(),
+            apvts.getRawParameterValue("preCompRelease")->load(),
+            bypassComp ? 0.0f : apvts.getRawParameterValue("preCompMakeup")->load(),
+            bypassComp ? 0.0f : apvts.getRawParameterValue("preCompBlend")->load());
+        preAmpStage.process(buffer);
+    }
 
     // Neural amp processing
-    neuralAmp.update(
-        apvts.getRawParameterValue("inputGain")->load(),
-        apvts.getRawParameterValue("masterVolume")->load());
-    neuralAmp.process(buffer);
+    if (apvts.getRawParameterValue("bypassAmp")->load() < 0.5f)
+    {
+        neuralAmp.update(
+            apvts.getRawParameterValue("inputGain")->load(),
+            apvts.getRawParameterValue("masterVolume")->load());
+        neuralAmp.process(buffer);
+    }
 
     // Post-amp stage: EQ + compression to glue and shape after distortion
-    postAmpStage.update(
-        apvts.getRawParameterValue("postEqLow")->load(),
-        apvts.getRawParameterValue("postEqMid")->load(),
-        apvts.getRawParameterValue("postEqHigh")->load(),
-        apvts.getRawParameterValue("postEqLowFreq")->load(),
-        apvts.getRawParameterValue("postEqMidFreq")->load(),
-        apvts.getRawParameterValue("postEqHighFreq")->load(),
-        apvts.getRawParameterValue("postCompThresh")->load(),
-        apvts.getRawParameterValue("postCompRatio")->load(),
-        apvts.getRawParameterValue("postCompAttack")->load(),
-        apvts.getRawParameterValue("postCompRelease")->load(),
-        apvts.getRawParameterValue("postCompMakeup")->load(),
-        apvts.getRawParameterValue("postCompBlend")->load());
-    postAmpStage.process(buffer);
+    {
+        const bool bypassEq   = apvts.getRawParameterValue("bypassPostEq")->load() > 0.5f;
+        const bool bypassComp = apvts.getRawParameterValue("bypassPostComp")->load() > 0.5f;
+        postAmpStage.update(
+            bypassEq ? 0.0f : apvts.getRawParameterValue("postEqLow")->load(),
+            bypassEq ? 0.0f : apvts.getRawParameterValue("postEqMid")->load(),
+            bypassEq ? 0.0f : apvts.getRawParameterValue("postEqHigh")->load(),
+            apvts.getRawParameterValue("postEqLowFreq")->load(),
+            apvts.getRawParameterValue("postEqMidFreq")->load(),
+            apvts.getRawParameterValue("postEqHighFreq")->load(),
+            apvts.getRawParameterValue("postCompThresh")->load(),
+            bypassComp ? 1.0f : apvts.getRawParameterValue("postCompRatio")->load(),
+            apvts.getRawParameterValue("postCompAttack")->load(),
+            apvts.getRawParameterValue("postCompRelease")->load(),
+            bypassComp ? 0.0f : apvts.getRawParameterValue("postCompMakeup")->load(),
+            bypassComp ? 0.0f : apvts.getRawParameterValue("postCompBlend")->load());
+        postAmpStage.process(buffer);
+    }
 
     // IR / Cabinet convolution
     irLoader.setEnabled(apvts.getRawParameterValue("irEnabled")->load() > 0.5f);
@@ -375,15 +417,26 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         buffer.copyFrom(1, 0, buffer, 0, 0, buffer.getNumSamples());
 
     // Post-IR 8-band EQ
-    static const char* eqParamIds[EQProcessor::kNumBands] = {
+    static const char* eqGainIds[EQProcessor::kNumBands] = {
         "eq1Gain","eq2Gain","eq3Gain","eq4Gain",
         "eq5Gain","eq6Gain","eq7Gain","eq8Gain"
     };
-    float eqGains[EQProcessor::kNumBands];
-    for (int b = 0; b < EQProcessor::kNumBands; ++b)
-        eqGains[b] = apvts.getRawParameterValue(eqParamIds[b])->load();
-    eqProcessor.update(eqGains);
-    eqProcessor.process(buffer);
+    static const char* eqFreqIds[EQProcessor::kNumBands] = {
+        "eq1Freq","eq2Freq","eq3Freq","eq4Freq",
+        "eq5Freq","eq6Freq","eq7Freq","eq8Freq"
+    };
+    if (apvts.getRawParameterValue("bypassMfEq")->load() < 0.5f)
+    {
+        float eqGains[EQProcessor::kNumBands];
+        float eqFreqs[EQProcessor::kNumBands];
+        for (int b = 0; b < EQProcessor::kNumBands; ++b)
+        {
+            eqGains[b] = apvts.getRawParameterValue(eqGainIds[b])->load();
+            eqFreqs[b] = apvts.getRawParameterValue(eqFreqIds[b])->load();
+        }
+        eqProcessor.update(eqGains, eqFreqs);
+        eqProcessor.process(buffer);
+    }
 
     // Output volume — final gain at end of chain
     {
@@ -401,6 +454,19 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+
+    // Remove stale children embedded by previous replaceState() calls.
+    // Loop handles multiple duplicates from prior buggy save cycles.
+    for (auto c = state.getChildWithName("KnobRanges"); c.isValid();
+         c = state.getChildWithName("KnobRanges"))
+        state.removeChild(c, nullptr);
+    for (auto c = state.getChildWithName("SectionImages"); c.isValid();
+         c = state.getChildWithName("SectionImages"))
+        state.removeChild(c, nullptr);
+    for (auto c = state.getChildWithName("SectionColours"); c.isValid();
+         c = state.getChildWithName("SectionColours"))
+        state.removeChild(c, nullptr);
+
     state.setProperty("irFilePath",    irLoader.getFilePath(),       nullptr);
     state.setProperty("bundledIRName", irLoader.getFilePath().isEmpty()
                                            ? irLoader.getFileName() : "",  nullptr);
@@ -419,6 +485,16 @@ void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
     if (sectionImagesTree.isValid() && sectionImagesTree.getNumChildren() > 0)
         state.addChild(sectionImagesTree.createCopy(), -1, nullptr);
+
+    juce::ValueTree coloursTree("SectionColours");
+    for (int i = 0; i < SectionColourSet::kNumSections; ++i)
+    {
+        juce::ValueTree e("Colour");
+        e.setProperty("idx", i, nullptr);
+        e.setProperty("hex", sectionColours.colours[i].toDisplayString(true), nullptr);
+        coloursTree.addChild(e, -1, nullptr);
+    }
+    state.addChild(coloursTree, -1, nullptr);
 
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
@@ -483,6 +559,24 @@ void GuitarAmpAudioProcessor::setStateInformation(const void* data, int sizeInBy
             if (auto* ed = dynamic_cast<GuitarAmpAudioProcessorEditor*>(getActiveEditor()))
                 ed->loadSectionImagesFromTree();
         });
+
+        auto ct = newState.getChildWithName("SectionColours");
+        if (ct.isValid())
+        {
+            for (int i = 0; i < ct.getNumChildren(); ++i)
+            {
+                auto e = ct.getChild(i);
+                int idx = (int)e.getProperty("idx");
+                juce::String hex = e.getProperty("hex").toString();
+                if (idx >= 0 && idx < SectionColourSet::kNumSections && hex.isNotEmpty())
+                    sectionColours.colours[idx] = juce::Colour::fromString(hex);
+            }
+            juce::MessageManager::callAsync([this]
+            {
+                if (auto* ed = dynamic_cast<GuitarAmpAudioProcessorEditor*>(getActiveEditor()))
+                    ed->applySectionColours();
+            });
+        }
     }
 }
 

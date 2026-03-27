@@ -4,7 +4,11 @@ const float EQProcessor::kBandFreqs[EQProcessor::kNumBands] = {
     80.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f
 };
 
-EQProcessor::EQProcessor() {}
+EQProcessor::EQProcessor()
+{
+    for (int b = 0; b < kNumBands; ++b)
+        freqHz[b] = kBandFreqs[b];
+}
 
 void EQProcessor::prepare(double sr, int samplesPerBlock)
 {
@@ -25,11 +29,14 @@ void EQProcessor::prepare(double sr, int samplesPerBlock)
     updateFilters();
 }
 
-void EQProcessor::update(const float gains[kNumBands])
+void EQProcessor::update(const float gains[kNumBands], const float freqs[kNumBands])
 {
     bool changed = false;
     for (int b = 0; b < kNumBands; ++b)
+    {
         if (gainDb[b] != gains[b]) { gainDb[b] = gains[b]; changed = true; }
+        if (freqHz[b] != freqs[b]) { freqHz[b] = freqs[b]; changed = true; }
+    }
 
     if (changed)
         updateFilters();
@@ -41,10 +48,10 @@ void EQProcessor::updateFilters()
 
     for (int ch = 0; ch < kMaxChannels; ++ch)
     {
-        // Band 0: Low shelf at 80 Hz
+        // Band 0: Low shelf
         *filters[0][ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeLowShelf(
-                sampleRate, kBandFreqs[0], 0.7f,
+                sampleRate, freqHz[0], 0.7f,
                 juce::Decibels::decibelsToGain(gainDb[0]));
 
         // Bands 1-6: Parametric peak filters
@@ -53,14 +60,14 @@ void EQProcessor::updateFilters()
         {
             *filters[b][ch].coefficients =
                 *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-                    sampleRate, kBandFreqs[b], kPeakQ,
+                    sampleRate, freqHz[b], kPeakQ,
                     juce::Decibels::decibelsToGain(gainDb[b]));
         }
 
-        // Band 7: High shelf at 16 kHz
+        // Band 7: High shelf
         *filters[7][ch].coefficients =
             *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-                sampleRate, kBandFreqs[7], 0.7f,
+                sampleRate, freqHz[7], 0.7f,
                 juce::Decibels::decibelsToGain(gainDb[7]));
     }
 }

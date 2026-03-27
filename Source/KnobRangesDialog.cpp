@@ -15,7 +15,7 @@ struct RowDef { const char* id; const char* name; const char* unit; };
 static const struct SectionDef
 {
     const char* title;
-    RowDef rows[6];
+    RowDef rows[8];
     int numRows;
 } kSections[] =
 {
@@ -47,6 +47,26 @@ static const struct SectionDef
         { "postCompMakeup",  "Makeup",    "dB" },
         { "postCompBlend",   "Blend",     "%"  },
     }, 6 },
+    { "MF EQ GAIN", {
+        { "eq1Gain", "Band 1 Gain",  "dB" },
+        { "eq2Gain", "Band 2 Gain", "dB" },
+        { "eq3Gain", "Band 3 Gain", "dB" },
+        { "eq4Gain", "Band 4 Gain",  "dB" },
+        { "eq5Gain", "Band 5 Gain",  "dB" },
+        { "eq6Gain", "Band 6 Gain",  "dB" },
+        { "eq7Gain", "Band 7 Gain",  "dB" },
+        { "eq8Gain", "Band 8 Gain", "dB" },
+    }, 8 },
+    { "MF EQ FREQ", {
+        { "eq1Freq", "Band 1 Freq",  "Hz" },
+        { "eq2Freq", "Band 2 Freq", "Hz" },
+        { "eq3Freq", "Band 3 Freq", "Hz" },
+        { "eq4Freq", "Band 4 Freq",  "Hz" },
+        { "eq5Freq", "Band 5 Freq",  "Hz" },
+        { "eq6Freq", "Band 6 Freq",  "Hz" },
+        { "eq7Freq", "Band 7 Freq",  "Hz" },
+        { "eq8Freq", "Band 8 Freq", "Hz" },
+    }, 8 },
 };
 
 static constexpr int kNumSections = (int)(sizeof(kSections) / sizeof(kSections[0]));
