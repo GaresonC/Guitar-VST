@@ -38,7 +38,7 @@ jobs:
           echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Bumping: ${LATEST:-none} -> v${NEW_VERSION}"
 
-  build:
+  build-windows:
     name: Build Windows
     needs: version
     runs-on: windows-latest
@@ -57,6 +57,10 @@ jobs:
       - name: Build Release
         run: cmake --build build --config Release
 
+      - name: List build output
+        shell: bash
+        run: find build/MFAmp_artefacts -type f | head -50
+
       - name: Package artifacts
         shell: bash
         run: |
@@ -73,19 +77,61 @@ jobs:
           name: MF-AMP-win64
           path: MF-AMP-*-win64.zip
 
+  build-macos:
+    name: Build macOS
+    needs: version
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: >
+          cmake -B build
+          -G "Xcode"
+          -DMFAMP_ASIO=OFF
+          -DMFAMP_INSTALL_LOCAL=OFF
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
+      - name: Build Release
+        run: cmake --build build --config Release
+
+      - name: List build output
+        run: find build/MFAmp_artefacts -type f | head -50
+
+      - name: Package artifacts
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          STAGING="MF-AMP-${VERSION}"
+          mkdir -p "${STAGING}"
+          cp -r "build/MFAmp_artefacts/Release/VST3/MF AMP.vst3" "${STAGING}/"
+          cp -r "build/MFAmp_artefacts/Release/Standalone/MF AMP.app" "${STAGING}/"
+          zip -r "MF-AMP-${VERSION}-mac-universal.zip" "${STAGING}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MF-AMP-mac
+          path: MF-AMP-*-mac-universal.zip
+
   release:
     name: Create Release
-    needs: [version, build]
+    needs: [version, build-windows, build-macos]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: MF-AMP-win64
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f
 
       - name: Create tag
         run: |
@@ -97,6 +143,17 @@ jobs:
         with:
           tag_name: ${{ needs.version.outputs.tag }}
           name: MF AMP ${{ needs.version.outputs.version }}
-          draft: true
+          draft: false
           generate_release_notes: true
-          files: MF-AMP-*-win64.zip
+          fail_on_unmatched_files: true
+          files: artifacts/*.zip
+
+      - name: Remove source code archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+          gh release delete-asset "$TAG" "${TAG}.zip" --yes || true
+          gh release delete-asset "$TAG" "${TAG}.tar.gz" --yes || true
+          gh release delete-asset "$TAG" "source code (zip)" --yes || true
+          gh release delete-asset "$TAG" "source code (tar.gz)" --yes || true
