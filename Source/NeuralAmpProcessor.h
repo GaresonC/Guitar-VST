@@ -4,6 +4,13 @@
 #include <fstream>
 #include <memory>
 
+// Real-time neural amp modelling via RTNeural (LSTM + Dense).
+// Supports two JSON formats:
+//   1. GuitarML (PyTorch export): detected by "model_data" + "state_dict" keys.
+//      Weights are transposed from PyTorch [4H,I] layout to RTNeural [I,4H].
+//   2. Native RTNeural JSON: parsed directly by RTNeural's built-in loader.
+// Thread safety: model loading acquires a SpinLock; process() uses a TryLock
+// so the audio thread never blocks — it falls back to pass-through if locked.
 class NeuralAmpProcessor
 {
 public:

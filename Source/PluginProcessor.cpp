@@ -1,3 +1,13 @@
+// PluginProcessor.cpp
+// MF AMP — main audio processor implementation.
+//
+// Responsibilities:
+//   - APVTS parameter layout (createParameterLayout)
+//   - DSP graph preparation and teardown (prepareToPlay / releaseResources)
+//   - Per-block signal chain routing (processBlock)
+//   - Preset state serialisation, including extra state beyond APVTS parameters
+//     (knob ranges, section images, section colours, IR path, amp model path)
+
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <BinaryData.h>
@@ -547,6 +557,14 @@ void GuitarAmpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 }
 
 //==============================================================================
+// Serialise the full plugin state to a binary blob (XML under the hood).
+// Beyond the APVTS parameter values, we also save:
+//   - "irFilePath"    : absolute path of a user-loaded IR WAV file (empty = bundled IR)
+//   - "bundledIRName" : display name of the active bundled IR (empty = user file)
+//   - "ampModelPath"  : absolute path of the neural amp model JSON (empty = bundled)
+//   - <KnobRanges>    : per-parameter min/max overrides (not skew; that is per-session only)
+//   - <SectionImages> : base64-encoded PNG images for each UI section
+//   - <SectionColours>: hex colour strings for each UI section border
 void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
@@ -596,6 +614,11 @@ void GuitarAmpAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     copyXmlToBinary(*xml, destData);
 }
 
+// Restore plugin state from a previously saved binary blob.
+// Restores APVTS parameters first, then reloads the IR and amp model from their
+// saved paths. Knob ranges, section images, and section colours are extracted from
+// the child ValueTrees embedded in the state. UI rebuilds (slider attachments,
+// section images, section colours) are dispatched asynchronously to the message thread.
 void GuitarAmpAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));

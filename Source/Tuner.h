@@ -10,6 +10,10 @@ struct TunerResult
     bool  hasSignal = false;
 };
 
+// YIN pitch detector operating on channel 0.
+// Fills a 2048-sample ring buffer; runs detection each time the buffer wraps.
+// Results are stored in atomics so the UI can poll at 15 Hz without locking.
+// Valid detection range: 20 Hz – 2 kHz.
 class Tuner
 {
 public:

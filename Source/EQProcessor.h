@@ -1,6 +1,10 @@
 #pragma once
 #include <JuceHeader.h>
 
+// 8-band parametric EQ, placed post-IR in the signal chain.
+// Band 0: low shelf, bands 1–6: peak filters (Q=1.4, ~0.7 octave), band 7: high shelf.
+// Default centre frequencies: 80, 250, 500, 1k, 2k, 4k, 8k, 16k Hz (user-adjustable).
+// Processes per-sample through all 8 filters in cascade per channel.
 class EQProcessor
 {
 public:

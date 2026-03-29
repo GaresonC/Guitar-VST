@@ -9,7 +9,12 @@ public:
     // lowFreqHz / midFreqHz / highFreqHz: default EQ band centre frequencies
     StageProcessor(float lowFreqHz, float midFreqHz, float highFreqHz);
 
+    /** Initialise all filters and compute attack/release envelope coefficients.
+     *  Must be called before process() whenever the sample rate changes. */
     void prepare(double sampleRate, int samplesPerBlock);
+
+    /** Process buffer in-place: 3-band EQ followed by parallel-blended soft-knee
+     *  compression. Applies to all channels up to kMaxChannels. */
     void process(juce::AudioBuffer<float>& buffer);
 
     // lowDb, midDb, highDb: EQ gain in dB

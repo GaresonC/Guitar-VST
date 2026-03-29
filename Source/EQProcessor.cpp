@@ -29,6 +29,8 @@ void EQProcessor::prepare(double sr, int samplesPerBlock)
     updateFilters();
 }
 
+// Only recomputes filter coefficients when a gain or frequency actually changes,
+// avoiding unnecessary work on every processBlock call.
 void EQProcessor::update(const float gains[kNumBands], const float freqs[kNumBands])
 {
     bool changed = false;

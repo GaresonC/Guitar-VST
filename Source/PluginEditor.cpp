@@ -1,6 +1,10 @@
 #include "PluginEditor.h"
 #include <BinaryData.h>
 
+#if JUCE_STANDALONE_APPLICATION
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
+
 //==============================================================================
 // Colour palette
 static const juce::Colour kBg        { 0xff141414 };
@@ -614,9 +618,6 @@ GuitarAmpAudioProcessorEditor::GuitarAmpAudioProcessorEditor(GuitarAmpAudioProce
     setupBypassButton(bypassPreCompBtn);
     bypassPreCompAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassPreComp", bypassPreCompBtn);
 
-    setupBypassButton(bypassAmpBtn);
-    bypassAmpAtt = std::make_unique<ButtonAtt>(audioProcessor.apvts, "bypassAmp", bypassAmpBtn);
-
     setupBypassButton(bypassCabinetBtn);
     // Cabinet: enabled=true means NOT bypassed, so invert button colours
     bypassCabinetBtn.setColour(juce::TextButton::buttonColourId,   kAccent.withAlpha(0.2f));
@@ -810,11 +811,6 @@ void GuitarAmpAudioProcessorEditor::updateBypassVisuals()
         preCompThreshLabel, preCompRatioLabel, preCompAttackLabel,
         preCompReleaseLabel, preCompMakeupLabel, preCompBlendLabel,
         preCompRatioValueLabel, preCompRatioDivLabel, preCompRatioOneLabel);
-
-    bool ampBypassed = bypassAmpBtn.getToggleState();
-    setAlpha(ampBypassed ? 0.2f : 1.0f,
-        gainSlider, masterSlider, gainLabel, masterLabel,
-        loadModelBtn, modelFileLabel);
 
     // Cabinet bypass is inverted: enabled=true means NOT bypassed
     bool cabBypassed = !bypassCabinetBtn.getToggleState();
@@ -1010,6 +1006,23 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
     menu.addItem(3, "Section Images...");
     menu.addItem(4, "Section Colors...");
 
+#if JUCE_STANDALONE_APPLICATION
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup currentSetup;
+        holder->deviceManager.getAudioDeviceSetup(currentSetup);
+        int currentBuf = currentSetup.bufferSize;
+
+        juce::PopupMenu bufMenu;
+        static constexpr int sizes[] = { 32, 64, 128, 256, 512, 1024 };
+        for (int i = 0; i < 6; ++i)
+            bufMenu.addItem(100 + i, juce::String(sizes[i]) + " samples", true, sizes[i] == currentBuf);
+
+        menu.addSeparator();
+        menu.addSubMenu("Buffer Size", bufMenu);
+    }
+#endif
+
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsBtn),
         [this](int result)
         {
@@ -1051,6 +1064,19 @@ void GuitarAmpAudioProcessorEditor::showSettingsMenu()
                 opts.resizable                  = false;
                 opts.launchAsync();
             }
+#if JUCE_STANDALONE_APPLICATION
+            else if (result >= 100 && result < 106)
+            {
+                static constexpr int sizes[] = { 32, 64, 128, 256, 512, 1024 };
+                if (auto* holder = juce::StandalonePluginHolder::getInstance())
+                {
+                    juce::AudioDeviceManager::AudioDeviceSetup setup;
+                    holder->deviceManager.getAudioDeviceSetup(setup);
+                    setup.bufferSize = sizes[result - 100];
+                    holder->deviceManager.setAudioDeviceSetup(setup, true);
+                }
+            }
+#endif
         });
 }
 
@@ -1174,13 +1200,15 @@ void GuitarAmpAudioProcessorEditor::applySectionColours()
         tintKnob(preCompReleaseSlider, preCompReleaseLabel, c);
         tintKnob(preCompMakeupSlider,  preCompMakeupLabel,  c);
         tintKnob(preCompBlendSlider,   preCompBlendLabel,   c);
+        preCompRatioValueLabel.setColour(juce::Label::textColourId, c.withAlpha(0.85f));
+        preCompRatioDivLabel  .setColour(juce::Label::textColourId, c.withAlpha(0.85f));
+        preCompRatioOneLabel  .setColour(juce::Label::textColourId, c.withAlpha(0.85f));
         tintButton(bypassPreCompBtn, c);
     }
 
     // kAmp
     tintLargeKnob(gainSlider, gainLabel, sc[kAmp]);
     tintKnob(masterSlider, masterLabel, sc[kAmp]);
-    tintButton(bypassAmpBtn, sc[kAmp]);
 
     // kCabinet
     tintComboBox(irPresetBox, sc[kCabinet]);
@@ -1208,6 +1236,9 @@ void GuitarAmpAudioProcessorEditor::applySectionColours()
         tintKnob(postCompReleaseSlider, postCompReleaseLabel, c);
         tintKnob(postCompMakeupSlider,  postCompMakeupLabel,  c);
         tintKnob(postCompBlendSlider,   postCompBlendLabel,   c);
+        postCompRatioValueLabel.setColour(juce::Label::textColourId, c.withAlpha(0.85f));
+        postCompRatioDivLabel  .setColour(juce::Label::textColourId, c.withAlpha(0.85f));
+        postCompRatioOneLabel  .setColour(juce::Label::textColourId, c.withAlpha(0.85f));
         tintButton(bypassPostCompBtn, c);
     }
 
@@ -1977,7 +2008,6 @@ void GuitarAmpAudioProcessorEditor::resized()
         placeBypass(bypassGateBtn,     xGate,     row1Y, wGate,     row1H);
         placeBypass(bypassPreEqBtn,    xPreEQ,    row1Y, wPreEQ,    row1H);
         placeBypass(bypassPreCompBtn,  xPreComp,  row1Y, wPreComp,  row1H);
-        placeBypass(bypassAmpBtn,      xAmp,      row1Y, wAmp,      row1H);
         placeBypass(bypassCabinetBtn,  xCab,      row1Y, wCab,      row1H);
         // POST EQ bypass — placed to the right of AMP bypass at bottom of AMP section
         bypassPostEqBtn.setBounds(xAmp + (wAmp - bw) / 2 + bw + 4, row1Y + row1H - bh - 4, bw, bh);

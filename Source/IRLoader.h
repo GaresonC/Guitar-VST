@@ -1,6 +1,9 @@
 #pragma once
 #include <JuceHeader.h>
 
+// Cabinet impulse-response loader — wraps juce::dsp::Convolution.
+// Two load paths: from a WAV file on disk, or from in-memory BinaryData (bundled IRs).
+// Convolution is mono, trimmed, and normalised.
 class IRLoader
 {
 public:

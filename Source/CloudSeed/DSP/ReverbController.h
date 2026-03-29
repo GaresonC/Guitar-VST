@@ -20,6 +20,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+// CloudSeed reverb — third-party library (Ghost Note Engineering, MIT licence).
+// MF AMP integration: PluginProcessor creates a ReverbController in prepareToPlay(),
+// sets ~30 default parameters for guitar use, then calls Process() in processBlock().
+// Only three parameters are exposed to the user: Mix, Decay, and Size (all 0–100 %).
+// All other CloudSeed parameters (tap count, diffusion stages, EQ, modulation, etc.)
+// are hard-coded to sensible guitar defaults in prepareToPlay().
+
 #pragma once
 
 #include <vector>

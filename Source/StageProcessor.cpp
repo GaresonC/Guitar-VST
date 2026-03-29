@@ -24,6 +24,8 @@ void StageProcessor::prepare(double sr, int samplesPerBlock)
         env[ch] = 0.0f;
     }
 
+    // One-pole IIR envelope coefficients: coeff = exp(-1 / (time_s * sampleRate))
+    // Gives an exponential decay that reaches ~63% in one time constant.
     const float sr_f = (float)sr;
     attackCoeff  = std::exp(-1.0f / (attackMs  * 0.001f * sr_f));
     releaseCoeff = std::exp(-1.0f / (releaseMs * 0.001f * sr_f));
@@ -89,6 +91,15 @@ void StageProcessor::updateFilters()
     }
 }
 
+// Soft-knee compressor applied sample-by-sample.
+// e  — per-channel envelope state (modified in place via reference).
+// Algorithm:
+//   1. Rectify: track the absolute value of the input.
+//   2. Envelope follow: one-pole smoother with separate attack/release coefficients.
+//   3. Gain reduction: linear ratio above threshold — gr = (T + (e - T)/ratio) / e.
+//      This is a hard-knee calculation; the "soft" quality comes from the slow
+//      attack envelope rather than a polynomial knee region.
+//   4. Multiply input by the gain reduction factor.
 float StageProcessor::applyComp(float x, float& e) const
 {
     const float absX  = std::abs(x);
@@ -98,6 +109,8 @@ float StageProcessor::applyComp(float x, float& e) const
     const float threshold = juce::Decibels::decibelsToGain(compThreshDb);
     if (e > threshold)
     {
+        // Gain reduction: maps envelope level to compressed level, then divides by e
+        // so we get the multiplier to apply to the dry sample.
         const float gr = (threshold + (e - threshold) / compRatio)
                          / juce::jmax(e, 1e-9f);
         return x * gr;

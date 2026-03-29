@@ -133,7 +133,7 @@ private:
     juce::Label  reverbMixLabel,  reverbDecayLabel,  reverbSizeLabel;
 
     // Section bypass buttons
-    juce::TextButton bypassGateBtn, bypassPreEqBtn, bypassPreCompBtn, bypassAmpBtn;
+    juce::TextButton bypassGateBtn, bypassPreEqBtn, bypassPreCompBtn;
     juce::TextButton bypassCabinetBtn, bypassPostEqBtn, bypassPostCompBtn, bypassMfEqBtn;
     juce::TextButton bypassReverbBtn;
 
@@ -145,7 +145,7 @@ private:
     std::unique_ptr<SliderAtt> gainAtt, masterAtt;
     std::unique_ptr<SliderAtt> gateThreshAtt;
     std::unique_ptr<ButtonAtt> irEnabledAtt, muteEnabledAtt, gateEnabledAtt;
-    std::unique_ptr<ButtonAtt> bypassPreEqAtt, bypassPreCompAtt, bypassAmpAtt;
+    std::unique_ptr<ButtonAtt> bypassPreEqAtt, bypassPreCompAtt;
     std::unique_ptr<ButtonAtt> bypassPostEqAtt, bypassPostCompAtt, bypassMfEqAtt, bypassReverbAtt;
     std::unique_ptr<SliderAtt> reverbMixAtt, reverbDecayAtt, reverbSizeAtt;
     std::unique_ptr<SliderAtt> eqAtts[EQProcessor::kNumBands];

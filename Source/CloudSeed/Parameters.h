@@ -20,6 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+// CloudSeed parameter definitions — all parameters are normalised to 0.0–1.0.
+// ScaleParam() maps from normalised to DSP-meaningful values (e.g. milliseconds,
+// frequency Hz, counts). SetParameter/GetParameter use normalised values.
+
 #pragma once
 
 #include <math.h>

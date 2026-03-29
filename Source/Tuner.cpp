@@ -56,6 +56,20 @@ void Tuner::runAnalysis()
     }
 }
 
+// YIN pitch detection algorithm (de Cheveigné & Kawahara, 2002).
+//
+// Steps:
+//   1. Difference function — autocorrelation-like sum of squared differences
+//      for each lag τ from 1 to N/2.
+//   2. Cumulative mean normalised difference (CMND) — divides each d(τ) by
+//      the running mean of all d(1..τ), removing the downward bias at small τ.
+//   3. Absolute threshold — finds the first τ where CMND < 0.15 and walks
+//      forward to the local minimum (avoids octave errors). Falls back to the
+//      global CMND minimum if no dip crosses the threshold (confidence gate: 0.5).
+//   4. Parabolic interpolation — refines τ to sub-sample accuracy using the
+//      three points around the minimum.
+//
+// Returns estimated frequency = sampleRate / τ_refined, or 0 if no pitch found.
 float Tuner::yinDetect() const
 {
     const int N    = kBufSize;
